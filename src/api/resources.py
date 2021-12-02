@@ -12,10 +12,38 @@ from src.api.services import (
 from itertools import chain
 
 
-class Document(Resource):
+class DocumentRetrieveUpdateDeleteResource(Resource):
     def get(self, doc_uuid):
+        """
+        Retrieves document content
+        :param doc_uuid:
+        :return:
+        """
+        with open(os.path.join(app.config['documents_dir'], '{}.txt'.format(doc_uuid)), 'r') as f:
+            out = f.read()
+
+        return {
+            'content': out
+        }, 200
+
+    def put(self, doc_uuid):
+        """
+        Updates document, and database
+        :param doc_uuid:
+        :return:
+        """
         pass
 
+    def delete(self, doc_uuid):
+        """
+        Deletes document, from filesystem and from database
+        :param doc_uuid:
+        :return:
+        """
+        pass
+
+
+class DocumentCreateResource(Resource):
     def post(self):
         from src.api import get_mysql
 
@@ -39,9 +67,17 @@ class Document(Resource):
         cur.execute('INSERT INTO paragraph (document_id, position_in_fulltext) VALUES ' + ','.join(['(%s, %s)' for i in range(len(paragraphs))]),
                     tuple(chain.from_iterable(((str(doc_uuid), p[0]) for p in paragraphs))))
         # TODO: create linkage between terms and paragraphs here
-        # for start, end, paragraph_text in paragraphs:
-        #
+        for start, end, paragraph_text in paragraphs:
+            cur.execute('SELECT paragraph_id FROM paragraph WHERE document_id = %s AND position_in_fullText = %s', (str(doc_uuid), start))
+            paragraph_id, = cur.fetchone()
 
+            # The following four lines are abstractable
+            terms = process_raw_document_into_terms(paragraph_text)
+            cur.execute('INSERT IGNORE INTO term (term_text) VALUES ' + ','.join(['(%s)' for i in range(len(terms))]), tuple(terms))
+            cnt = Counter(terms)
+            cur.execute('INSERT INTO paragraph_term (frequency, paragraph_id, term_text) VALUES ' + ','.join(
+                ['(%s, %s, %s)' for i in range(len(cnt.most_common()))]),
+                        tuple(chain.from_iterable((f, paragraph_id, t) for t, f in cnt.most_common())))
 
         cur.execute('SELECT paragraph_id, position_in_fulltext FROM paragraph WHERE document_id = %s', (doc_uuid,))
         for paragraph_id, position_in_fulltext, in cur.fetchall():
@@ -49,20 +85,32 @@ class Document(Resource):
 
             cur.execute('INSERT INTO sentence (paragraph_id, position_in_paragraph) VALUES ' + ','.join(['(%s, %s)' for i in range(len(sentences))]),
                         tuple(chain.from_iterable(((str(paragraph_id), s[0]) for s in sentences))))
-            # TODO: create linkage between terms and sentences here
 
+            for start, end, sentence_text in sentences:
+                cur.execute('SELECT sentence_id FROM sentence WHERE paragraph_id = %s AND position_in_paragraph = %s',
+                            (paragraph_id, start))
+                sentence_id, = cur.fetchone()
 
+                terms = process_raw_document_into_terms(sentence_text)
+                cur.execute(
+                    'INSERT IGNORE INTO term (term_text) VALUES ' + ','.join(['(%s)' for i in range(len(terms))]),
+                    tuple(terms))
+                cnt = Counter(terms)
+                cur.execute('INSERT INTO sentence_term (frequency, sentence_id, term_text) VALUES ' + ','.join(
+                    ['(%s, %s, %s)' for i in range(len(cnt.most_common()))]),
+                            tuple(chain.from_iterable((f, sentence_id, t) for t, f in cnt.most_common())))
 
         # process raw text into a list of unique stemmed words to be added to terms
         # add the terms that dont already exist to the db, and then add document_term links
         terms = process_raw_document_into_terms(text)
-        print(terms)
         cur.execute('INSERT IGNORE INTO term (term_text) VALUES ' + ','.join(['(%s)' for i in range(len(terms))]), tuple(terms))
         cnt = Counter(terms)
         cur.execute('INSERT INTO document_term (frequency, document_id, term_text) VALUES ' + ','.join(['(%s, %s, %s)' for i in range(len(cnt.most_common()))]),
                     tuple(chain.from_iterable((f, str(doc_uuid), t) for t, f in cnt.most_common())))
 
-        cur.callproc('recompute_all_tfidf_scores')  # recomputes tfidf scores at the database level
+        cur.callproc('recompute_all_document_tfidf_scores')
+        cur.callproc('recompute_all_paragraph_tfidf_scores')
+        cur.callproc('recompute_all_sentence_tfidf_scores')
 
         get_mysql().connection.commit()
 
@@ -70,9 +118,3 @@ class Document(Resource):
         return {
             'doc_uuid': str(doc_uuid)
         }, 201
-
-    def put(self, doc_uuid):
-        pass
-
-    def delete(self, doc_uuid):
-        pass

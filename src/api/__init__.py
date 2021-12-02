@@ -4,7 +4,7 @@ from flask import Flask
 from flask_restful import Api
 from flask_pymysql import MySQL
 
-from src.api.resources import Document
+from src.api.resources import DocumentCreateResource, DocumentRetrieveUpdateDeleteResource
 
 
 pymysql_connect_kwargs = {'user': 'root',
@@ -28,7 +28,8 @@ def create_app():
     app.config['documents_dir'] = os.environ['DOCUMENTS_DIR']
     api = Api(app)
 
-    api.add_resource(Document, '/doc')
+    api.add_resource(DocumentCreateResource, '/doc')
+    api.add_resource(DocumentRetrieveUpdateDeleteResource, '/doc/<string:doc_uuid>')
 
     mysql = MySQL()
     mysql.init_app(app)
