@@ -43,7 +43,18 @@ class DocumentRetrieveUpdateDeleteResource(Resource):
         pass
 
 
-class DocumentCreateResource(Resource):
+class DocumentListCreateResource(Resource):
+    def get(self):
+        from src.api import get_mysql
+        cur = get_mysql().connection.cursor()
+
+        cur.execute('SELECT document_id, timestamp FROM document LIMIT 1000')
+        tuples = cur.fetchall()
+
+        return {
+            'documents': [{'id': doc_id, 'date': date.strftime('%Y-%m-%d')} for doc_id, date in tuples]
+        }, 200
+
     def post(self):
         from src.api import get_mysql
 
@@ -80,7 +91,7 @@ class DocumentCreateResource(Resource):
                         tuple(chain.from_iterable((f, paragraph_id, t) for t, f in cnt.most_common())))
 
         cur.execute('SELECT paragraph_id, position_in_fulltext FROM paragraph WHERE document_id = %s', (doc_uuid,))
-        for paragraph_id, position_in_fulltext, in cur.fetchall():
+        for paragraph_id, position_in_fulltext in cur.fetchall():
             sentences = break_paragraph_into_sentences([text for s, e, text in paragraphs if s == position_in_fulltext][0])
 
             cur.execute('INSERT INTO sentence (paragraph_id, position_in_paragraph) VALUES ' + ','.join(['(%s, %s)' for i in range(len(sentences))]),
@@ -118,3 +129,59 @@ class DocumentCreateResource(Resource):
         return {
             'doc_uuid': str(doc_uuid)
         }, 201
+
+
+class TrendsResource(Resource):
+    """
+    A resource for getting term trends
+    """
+
+    GRANULARITY_DOCUMENT = 'document'
+    GRANULARITY_PARAGRAPH = 'paragraph'
+    GRANULARITY_SENTENCE = 'sentence'
+
+    BIN_DAY = 'day'
+    BIN_MONTH = 'month'
+    BIN_YEAR = 'year'
+
+    def get(self, granularity, term_text):
+        from src.api import get_mysql
+
+        cur = get_mysql().connection.cursor()
+
+        bin_type = request.args.get('bin_type')
+
+        if granularity == self.GRANULARITY_DOCUMENT:
+            cur.execute('SELECT frequency, timestamp FROM document_term JOIN document USING (document_id) WHERE term_text = %s', (term_text,))
+            freq_date_pairs = cur.fetchall()
+        elif granularity == self.GRANULARITY_PARAGRAPH:
+            cur.execute(
+                'SELECT frequency, timestamp FROM paragraph_term JOIN paragraph USING (paragraph_id) JOIN document USING (document_id) WHERE term_text = %s',
+                (term_text,))
+            freq_date_pairs = cur.fetchall()
+        elif granularity == self.GRANULARITY_SENTENCE:
+            cur.execute(
+                'SELECT frequency, timestamp FROM sentence_term JOIN sentence USING (sentence_id) JOIN paragraph USING (paragraph_id) JOIN document USING (document_id) WHERE term_text = %s',
+                (term_text,))
+            freq_date_pairs = cur.fetchall()
+        else:
+            return {
+                'error': 'unknown granularity'
+            }, 400
+
+        date_to_freq_map = {}
+        date_format = {
+            self.BIN_DAY: '%Y-%m-%d',
+            self.BIN_MONTH: '%Y-%m',
+            self.BIN_YEAR: '%Y',
+        }
+        for freq, date in freq_date_pairs:
+            key = date.strftime(date_format[bin_type])
+            if key in date_to_freq_map:
+                date_to_freq_map[key] += freq
+            else:
+                date_to_freq_map[key] = freq
+
+        return {
+            'data': date_to_freq_map
+        }, 200
