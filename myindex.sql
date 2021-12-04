@@ -32,7 +32,7 @@ CREATE TABLE topic (
 );
 
 CREATE TABLE document_term (
-	score DECIMAL,
+	score DOUBLE,
 	frequency INT,
     document_id VARCHAR(100),
     term_text VARCHAR(100),
@@ -41,7 +41,7 @@ CREATE TABLE document_term (
 );
 
 CREATE TABLE paragraph_term (
-	score DECIMAL,
+	score DOUBLE,
     frequency INT,
     paragraph_id INT,
     term_text VARCHAR(100),
@@ -50,7 +50,7 @@ CREATE TABLE paragraph_term (
 );
 
 CREATE TABLE sentence_term (
-	score DECIMAL,
+	score DOUBLE,
     frequency INT,
     sentence_id INT,
     term_text VARCHAR(100),
@@ -68,13 +68,13 @@ BEGIN
     DECLARE frequency_var INT;
     
 	-- calculate tfidf score of term in document
-    DECLARE tf_numerator INT;
-	DECLARE tf_denominator INT;
-    DECLARE tf DECIMAL;
-    DECLARE idf_numerator INT;
-    DECLARE idf_denominator INT;
-    DECLARE idf DECIMAL;
-    DECLARE tfidf DECIMAL;
+    DECLARE tf_numerator DOUBLE;
+	DECLARE tf_denominator DOUBLE;
+    DECLARE tf DOUBLE;
+    DECLARE idf_numerator DOUBLE;
+    DECLARE idf_denominator DOUBLE;
+    DECLARE idf DOUBLE;
+    DECLARE tfidf DOUBLE;
 
 
 	DECLARE document_term_cursor CURSOR FOR
@@ -110,13 +110,13 @@ BEGIN
     DECLARE frequency_var INT;
     
 	-- calculate tfidf score of term in document
-    DECLARE tf_numerator INT;
-	DECLARE tf_denominator INT;
-    DECLARE tf DECIMAL;
-    DECLARE idf_numerator INT;
-    DECLARE idf_denominator INT;
-    DECLARE idf DECIMAL;
-    DECLARE tfidf DECIMAL;
+    DECLARE tf_numerator DOUBLE;
+	DECLARE tf_denominator DOUBLE;
+    DECLARE tf DOUBLE;
+    DECLARE idf_numerator DOUBLE;
+    DECLARE idf_denominator DOUBLE;
+    DECLARE idf DOUBLE;
+    DECLARE tfidf DOUBLE;
 
 
 	DECLARE document_term_cursor CURSOR FOR
@@ -152,13 +152,13 @@ BEGIN
     DECLARE frequency_var INT;
     
 	-- calculate tfidf score of term in document
-    DECLARE tf_numerator INT;
-	DECLARE tf_denominator INT;
-    DECLARE tf DECIMAL;
-    DECLARE idf_numerator INT;
-    DECLARE idf_denominator INT;
-    DECLARE idf DECIMAL;
-    DECLARE tfidf DECIMAL;
+    DECLARE tf_numerator DOUBLE;
+	DECLARE tf_denominator DOUBLE;
+    DECLARE tf DOUBLE;
+    DECLARE idf_numerator DOUBLE;
+    DECLARE idf_denominator DOUBLE;
+    DECLARE idf DOUBLE;
+    DECLARE tfidf DOUBLE;
 
 	DECLARE document_term_cursor CURSOR FOR
 		SELECT frequency, sentence_id, term_text FROM sentence_term;
@@ -182,8 +182,31 @@ BEGIN
 END //
 DELIMITER ;
 
-SELECT * FROM sentence_term;
-CALL recompute_all_sentence_tfidf_scores();
 
-SELECT * FROM paragraph_term;
-SELECT * FROM document_term;
+DROP FUNCTION IF EXISTS compute_similarity_score;
+DELIMITER //
+CREATE FUNCTION compute_similarity_score(t1 VARCHAR(100), t2 VARCHAR(100))
+RETURNS DOUBLE
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+	DECLARE ret DOUBLE;
+    
+	SELECT SUM(ABS(dt1.score - dt2.score)) INTO ret FROM document 
+    JOIN document_term as dt1 
+    ON document.document_id = dt1.document_id AND (dt1.term_text = t2 OR dt1.term_text = t1)
+    LEFT JOIN document_term as dt2
+    ON document.document_id = dt2.document_id AND (dt2.term_text = t2 OR dt2.term_text = t1);
+    
+    RETURN(ret);
+END // 
+DELIMITER ;
+
+
+DROP PROCEDURE IF EXISTS compute_all_similarity_scores;
+DELIMITER //
+CREATE PROCEDURE compute_all_similarity_scores()
+BEGIN
+	SELECT DISTINCT t1.term_text, t2.term_text, compute_similarity_score(t1.term_text, t2.term_text) FROM term as t1 CROSS JOIN term as t2 WHERE t1.term_text < t2.term_text;
+END //
+DELIMITER ;

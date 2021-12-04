@@ -9,6 +9,7 @@ from nltk import RegexpTokenizer
 from nltk.stem import PorterStemmer
 from nltk.corpus import stopwords
 from pysbd import Segmenter
+from tqdm import tqdm
 
 
 def break_document_into_paragraphs(doc):
@@ -53,3 +54,27 @@ def process_raw_document_into_terms(text):
     tokenizer = RegexpTokenizer(r'\w+')
     tokens = [stemmer.stem(w.lower()) for w in tokenizer.tokenize(text) if w.lower() not in stop_words]
     return tokens
+
+
+def generate_topics(terms_list, similarity_score_fn, geometric_mean_of_tfidf_scores_for_term_fn):
+    """
+    Generates a list of topics
+    :param terms_list: The full list of terms
+    :param similarity_score_fn: A function (term1, term2) -> similarity_score
+    :param geometric_mean_of_tfidf_scores_for_term_fn: A function with the signature (term -> float) that takes a term and produces the geometric mean of tfidf scores for that term across all documents
+    :return: The list of topics (a list of list of terms), sorted in descending order of significance
+    """
+    THRESH = 0.001
+
+    L = []
+    for t in tqdm(terms_list):
+        was_added = False
+        for topic in L:
+            if all([similarity_score_fn(t, topic_term) < THRESH for topic_term in topic]):
+                topic.append(t)
+                was_added = True
+                break
+        if not was_added:
+            L.append([t])
+
+    return sorted(L, key=lambda l: sum(map(geometric_mean_of_tfidf_scores_for_term_fn, l)) / len(l), reverse=True)
