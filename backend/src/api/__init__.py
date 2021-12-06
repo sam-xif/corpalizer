@@ -4,7 +4,7 @@ from flask import Flask
 from flask_restful import Api
 from flask_pymysql import MySQL
 
-from src.api.resources import DocumentListCreateResource, DocumentRetrieveUpdateDeleteResource, TrendsResource, TopicsResource
+from api.resources import DocumentListCreateResource, DocumentRetrieveUpdateDeleteResource, TrendsResource, TopicsResource
 
 
 pymysql_connect_kwargs = {'user': 'root',

@@ -4,7 +4,7 @@ from collections import Counter
 from datetime import datetime
 from flask import request, current_app as app
 from flask_restful import Resource, reqparse
-from src.api.services import (
+from api.services import (
     break_document_into_paragraphs,
     break_paragraph_into_sentences,
     process_raw_document_into_terms,
