@@ -12,7 +12,7 @@ CREATE TABLE paragraph (
 	paragraph_id INT PRIMARY KEY AUTO_INCREMENT,
     document_id VARCHAR(100),
     position_in_fullText INT,
-    CONSTRAINT paragraph_document_fk FOREIGN KEY (document_id) REFERENCES document(document_id)
+    CONSTRAINT paragraph_document_fk FOREIGN KEY (document_id) REFERENCES document(document_id) ON UPDATE RESTRICT ON DELETE CASCADE
 --    PRIMARY KEY (document_id, position_in_fullText)
 );
 
@@ -20,7 +20,7 @@ CREATE TABLE sentence (
 	sentence_id INT PRIMARY KEY AUTO_INCREMENT,
     paragraph_id INT,
     position_in_paragraph INT,
-    CONSTRAINT sentence_paragraph_fk FOREIGN KEY (paragraph_id) REFERENCES paragraph(paragraph_id)
+    CONSTRAINT sentence_paragraph_fk FOREIGN KEY (paragraph_id) REFERENCES paragraph(paragraph_id) ON UPDATE RESTRICT ON DELETE CASCADE
 );
 
 CREATE TABLE term (
@@ -36,8 +36,8 @@ CREATE TABLE document_term (
 	frequency INT,
     document_id VARCHAR(100),
     term_text VARCHAR(100),
-    CONSTRAINT document_term_fk1 FOREIGN KEY (document_id) REFERENCES document(document_id),
-    CONSTRAINT document_term_fk2 FOREIGN KEY (term_text) REFERENCES term(term_text)
+    CONSTRAINT document_term_fk1 FOREIGN KEY (document_id) REFERENCES document(document_id) ON UPDATE RESTRICT ON DELETE CASCADE,
+    CONSTRAINT document_term_fk2 FOREIGN KEY (term_text) REFERENCES term(term_text) ON UPDATE RESTRICT ON DELETE CASCADE
 );
 
 CREATE TABLE paragraph_term (
@@ -45,8 +45,8 @@ CREATE TABLE paragraph_term (
     frequency INT,
     paragraph_id INT,
     term_text VARCHAR(100),
-    CONSTRAINT paragraph_term_fk1 FOREIGN KEY (paragraph_id) REFERENCES paragraph(paragraph_id),
-    CONSTRAINT paragraph_term_fk2 FOREIGN KEY (term_text) REFERENCES term(term_text)
+    CONSTRAINT paragraph_term_fk1 FOREIGN KEY (paragraph_id) REFERENCES paragraph(paragraph_id) ON UPDATE RESTRICT ON DELETE CASCADE,
+    CONSTRAINT paragraph_term_fk2 FOREIGN KEY (term_text) REFERENCES term(term_text) ON UPDATE RESTRICT ON DELETE CASCADE
 );
 
 CREATE TABLE sentence_term (
@@ -54,8 +54,8 @@ CREATE TABLE sentence_term (
     frequency INT,
     sentence_id INT,
     term_text VARCHAR(100),
-    CONSTRAINT sentence_term_fk1 FOREIGN KEY (sentence_id) REFERENCES sentence(sentence_id),
-    CONSTRAINT sentence_term_fk2 FOREIGN KEY (term_text) REFERENCES term(term_text)
+    CONSTRAINT sentence_term_fk1 FOREIGN KEY (sentence_id) REFERENCES sentence(sentence_id) ON UPDATE RESTRICT ON DELETE CASCADE,
+    CONSTRAINT sentence_term_fk2 FOREIGN KEY (term_text) REFERENCES term(term_text) ON UPDATE RESTRICT ON DELETE CASCADE
 );
 
 DROP PROCEDURE IF EXISTS recompute_all_document_tfidf_scores;

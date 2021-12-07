@@ -1,16 +1,12 @@
 import os
 import uuid
-from collections import Counter
-from datetime import datetime
 from flask import request, current_app as app
 from flask_restful import Resource, reqparse
 from api.services import (
-    break_document_into_paragraphs,
-    break_paragraph_into_sentences,
-    process_raw_document_into_terms,
     generate_topics,
+    insert_document,
+    recompute_tfidf_scores,
 )
-from itertools import chain
 import math
 
 
@@ -34,7 +30,29 @@ class DocumentRetrieveUpdateDeleteResource(Resource):
         :param doc_uuid:
         :return:
         """
-        pass
+        from api import get_mysql
+
+        parser = reqparse.RequestParser()
+        parser.add_argument('content')
+        args = parser.parse_args()
+        text = args.content
+        if text is None:
+            return {
+                'error': 'no content'
+            }, 400
+
+        # Create file
+        with open(os.path.join(app.config['documents_dir'], '{}.txt'.format(doc_uuid)), 'w+') as f:
+            f.write(text)
+
+        cur = get_mysql().connection.cursor()
+
+        cur.execute('DELETE FROM document WHERE document_id = %s', (doc_uuid,))
+        insert_document(doc_uuid, text, cur)
+        recompute_tfidf_scores(cur)
+
+        get_mysql().connection.commit()
+        return 204, None
 
     def delete(self, doc_uuid):
         """
@@ -42,12 +60,21 @@ class DocumentRetrieveUpdateDeleteResource(Resource):
         :param doc_uuid:
         :return:
         """
-        pass
+        from api import get_mysql
+        cur = get_mysql().connection.cursor()
+
+        os.remove(os.path.join(app.config['documents_dir'], '{}.txt'.format(doc_uuid)))
+
+        cur.execute('DELETE FROM document WHERE document_id = %s', (doc_uuid,))
+        recompute_tfidf_scores(cur)
+
+        get_mysql().connection.commit()
+        return 204, None
 
 
 class DocumentListCreateResource(Resource):
     def get(self):
-        from src.api import get_mysql
+        from api import get_mysql
         cur = get_mysql().connection.cursor()
 
         cur.execute('SELECT document_id, timestamp FROM document LIMIT 1000')
@@ -58,7 +85,7 @@ class DocumentListCreateResource(Resource):
         }, 200
 
     def post(self):
-        from src.api import get_mysql
+        from api import get_mysql
 
         parser = reqparse.RequestParser()
         parser.add_argument('content')
@@ -76,62 +103,8 @@ class DocumentListCreateResource(Resource):
         with open(os.path.join(app.config['documents_dir'], '{}.txt'.format(doc_uuid)), 'w+') as f:
             f.write(text)
 
-        # create db record
-        cur.execute('INSERT INTO document (document_id, timestamp) VALUES (%s, %s)', (doc_uuid, datetime.now()))
-
-        # Break document down into paragraphs and sentences and create those records
-        paragraphs = break_document_into_paragraphs(text)
-        if len(paragraphs) > 0:
-            cur.execute('INSERT INTO paragraph (document_id, position_in_fulltext) VALUES ' + ','.join(['(%s, %s)' for i in range(len(paragraphs))]),
-                        tuple(chain.from_iterable(((str(doc_uuid), p[0]) for p in paragraphs))))
-        # TODO: create linkage between terms and paragraphs here
-        for start, end, paragraph_text in paragraphs:
-            cur.execute('SELECT paragraph_id FROM paragraph WHERE document_id = %s AND position_in_fullText = %s', (str(doc_uuid), start))
-            paragraph_id, = cur.fetchone()
-
-            # The following four lines are abstractable
-            terms = process_raw_document_into_terms(paragraph_text)
-            if len(terms) > 0:
-                cur.execute('INSERT IGNORE INTO term (term_text) VALUES ' + ','.join(['(%s)' for i in range(len(terms))]), tuple(terms))
-                cnt = Counter(terms)
-                cur.execute('INSERT INTO paragraph_term (frequency, paragraph_id, term_text) VALUES ' + ','.join(
-                    ['(%s, %s, %s)' for i in range(len(cnt.most_common()))]),
-                            tuple(chain.from_iterable((f, paragraph_id, t) for t, f in cnt.most_common())))
-
-        cur.execute('SELECT paragraph_id, position_in_fulltext FROM paragraph WHERE document_id = %s', (doc_uuid,))
-        for paragraph_id, position_in_fulltext in cur.fetchall():
-            sentences = break_paragraph_into_sentences([text for s, e, text in paragraphs if s == position_in_fulltext][0])
-            if len(sentences) > 0:
-                cur.execute('INSERT INTO sentence (paragraph_id, position_in_paragraph) VALUES ' + ','.join(['(%s, %s)' for i in range(len(sentences))]),
-                            tuple(chain.from_iterable(((str(paragraph_id), s[0]) for s in sentences))))
-
-            for start, end, sentence_text in sentences:
-                cur.execute('SELECT sentence_id FROM sentence WHERE paragraph_id = %s AND position_in_paragraph = %s',
-                            (paragraph_id, start))
-                sentence_id, = cur.fetchone()
-
-                terms = process_raw_document_into_terms(sentence_text)
-                if len(terms) > 0:
-                    cur.execute(
-                        'INSERT IGNORE INTO term (term_text) VALUES ' + ','.join(['(%s)' for i in range(len(terms))]),
-                        tuple(terms))
-                    cnt = Counter(terms)
-                    cur.execute('INSERT INTO sentence_term (frequency, sentence_id, term_text) VALUES ' + ','.join(
-                        ['(%s, %s, %s)' for i in range(len(cnt.most_common()))]),
-                                tuple(chain.from_iterable((f, sentence_id, t) for t, f in cnt.most_common())))
-
-        # process raw text into a list of unique stemmed words to be added to terms
-        # add the terms that dont already exist to the db, and then add document_term links
-        terms = process_raw_document_into_terms(text)
-        if len(terms) > 0:
-            cur.execute('INSERT IGNORE INTO term (term_text) VALUES ' + ','.join(['(%s)' for i in range(len(terms))]), tuple(terms))
-            cnt = Counter(terms)
-            cur.execute('INSERT INTO document_term (frequency, document_id, term_text) VALUES ' + ','.join(['(%s, %s, %s)' for i in range(len(cnt.most_common()))]),
-                        tuple(chain.from_iterable((f, str(doc_uuid), t) for t, f in cnt.most_common())))
-
-        cur.callproc('recompute_all_document_tfidf_scores')
-        cur.callproc('recompute_all_paragraph_tfidf_scores')
-        cur.callproc('recompute_all_sentence_tfidf_scores')
+        insert_document(doc_uuid, text, cur)
+        recompute_tfidf_scores(cur)
 
         get_mysql().connection.commit()
 
@@ -155,11 +128,11 @@ class TrendsResource(Resource):
     BIN_YEAR = 'year'
 
     def get(self, granularity, term_text):
-        from src.api import get_mysql
+        from api import get_mysql
 
         cur = get_mysql().connection.cursor()
 
-        bin_type = request.args.get('bin_type')
+        bin_type = request.args.get('bin_type', self.BIN_DAY)
 
         if granularity == self.GRANULARITY_DOCUMENT:
             cur.execute('SELECT frequency, timestamp FROM document_term JOIN document USING (document_id) WHERE term_text = %s', (term_text,))
@@ -199,7 +172,7 @@ class TrendsResource(Resource):
 
 class TopicsResource(Resource):
     def get(self):
-        from src.api import get_mysql
+        from api import get_mysql
 
         cur = get_mysql().connection.cursor()
 
@@ -225,8 +198,6 @@ class TopicsResource(Resource):
                 product *= score
             product = math.pow(product, 1 / len(scores))
             return product
-
-        print('here!')
 
         return {
             'data': generate_topics(terms_list, similarity_score_fn, geometric_mean_of_tfidf_scores_for_term_fn)

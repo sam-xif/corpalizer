@@ -3,6 +3,7 @@ import os
 from flask import Flask
 from flask_restful import Api
 from flask_pymysql import MySQL
+from flask_cors import CORS
 
 from api.resources import DocumentListCreateResource, DocumentRetrieveUpdateDeleteResource, TrendsResource, TopicsResource
 
@@ -36,5 +37,13 @@ def create_app():
     mysql = MySQL()
     mysql.init_app(app)
     _mysql = mysql
+
+    @app.after_request
+    def after_request(response):
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
+        response.headers.add('Referrer-Policy', 'no-referrer')
+        return response
 
     return app
