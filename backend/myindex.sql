@@ -3,9 +3,8 @@ CREATE DATABASE myindex;
 USE myindex;
 
 CREATE TABLE document (
-	document_id VARCHAR(100) PRIMARY KEY, -- this is a UUID
+	document_id VARCHAR(100) PRIMARY KEY,
     timestamp DATE
-    -- Add a filename or some pointer to a file, or just a TEXT field, but TEXT might be limiting though so I don't think that would work
 );
 
 CREATE TABLE paragraph (
@@ -58,6 +57,17 @@ CREATE TABLE sentence_term (
     CONSTRAINT sentence_term_fk2 FOREIGN KEY (term_text) REFERENCES term(term_text) ON UPDATE RESTRICT ON DELETE CASCADE
 );
 
+DROP PROCEDURE IF EXISTS cleanup_terms;
+DELIMITER //
+CREATE PROCEDURE cleanup_terms()
+BEGIN
+    DROP TABLE IF EXISTS terms_to_delete;
+    CREATE TEMPORARY TABLE terms_to_delete (t VARCHAR(100));
+    INSERT INTO terms_to_delete SELECT term.term_text FROM term LEFT JOIN document_term USING (term_text) WHERE document_id IS NULL;
+    DELETE FROM term WHERE term_text IN (SELECT t FROM terms_to_delete);
+END //
+DELIMITER ;
+
 DROP PROCEDURE IF EXISTS recompute_all_document_tfidf_scores;
 DELIMITER //
 CREATE PROCEDURE recompute_all_document_tfidf_scores()
@@ -67,7 +77,6 @@ BEGIN
     DECLARE term_text_var VARCHAR(100);
     DECLARE frequency_var INT;
     
-	-- calculate tfidf score of term in document
     DECLARE tf_numerator DOUBLE;
 	DECLARE tf_denominator DOUBLE;
     DECLARE tf DOUBLE;
@@ -86,7 +95,7 @@ BEGIN
 		FETCH document_term_cursor INTO frequency_var, document_id_var, term_text_var;
 
 		SET tf_numerator = frequency_var;
-		SELECT IFNULL(SUM(frequency), 0) INTO tf_denominator FROM document_term WHERE document_id = document_id_var; -- also add the new frequency
+		SELECT IFNULL(SUM(frequency), 0) INTO tf_denominator FROM document_term WHERE document_id = document_id_var;
 		SET tf = tf_numerator / tf_denominator;
 			 
 		SELECT COUNT(*) INTO idf_numerator FROM document;
@@ -109,7 +118,6 @@ BEGIN
     DECLARE term_text_var VARCHAR(100);
     DECLARE frequency_var INT;
     
-	-- calculate tfidf score of term in document
     DECLARE tf_numerator DOUBLE;
 	DECLARE tf_denominator DOUBLE;
     DECLARE tf DOUBLE;
@@ -151,7 +159,6 @@ BEGIN
     DECLARE term_text_var VARCHAR(100);
     DECLARE frequency_var INT;
     
-	-- calculate tfidf score of term in document
     DECLARE tf_numerator DOUBLE;
 	DECLARE tf_denominator DOUBLE;
     DECLARE tf DOUBLE;
@@ -210,3 +217,4 @@ BEGIN
 	SELECT DISTINCT t1.term_text, t2.term_text, compute_similarity_score(t1.term_text, t2.term_text) FROM term as t1 CROSS JOIN term as t2 WHERE t1.term_text < t2.term_text;
 END //
 DELIMITER ;
+

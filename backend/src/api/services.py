@@ -59,7 +59,13 @@ def process_raw_document_into_terms(text):
     return tokens
 
 
-def generate_topics(terms_list, similarity_score_fn, geometric_mean_of_tfidf_scores_for_term_fn):
+def generate_topics(
+        terms_list,
+        similarity_score_fn,
+        geometric_mean_of_tfidf_scores_for_term_fn,
+        set_progress_callback=None,
+        poll_cancel=None,
+):
     """
     Generates a list of topics
     :param terms_list: The full list of terms
@@ -70,15 +76,21 @@ def generate_topics(terms_list, similarity_score_fn, geometric_mean_of_tfidf_sco
     THRESH = 0.001
 
     L = []
-    for t in tqdm(terms_list):
+    for i, t in enumerate(terms_list):
+
+        if poll_cancel is not None and poll_cancel() is True:
+            raise Exception('cancelled')
+
         was_added = False
         for topic in L:
-            if all([similarity_score_fn(t, topic_term) < THRESH for topic_term in topic]):
+            if all([similarity_score_fn(t, topic_term) < THRESH if similarity_score_fn(t, topic_term) is not None else False for topic_term in topic]):
                 topic.append(t)
                 was_added = True
                 break
         if not was_added:
             L.append([t])
+        if set_progress_callback is not None:
+            set_progress_callback(i / len(terms_list))
 
     return sorted(L, key=lambda l: sum(map(geometric_mean_of_tfidf_scores_for_term_fn, l)) / len(l), reverse=True)
 

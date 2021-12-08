@@ -3,6 +3,8 @@ import styled from 'styled-components';
 import DocumentList from './DocumentList';
 import DocumentUpload from './DocumentUpload';
 import Tabs from './Tabs';
+import Trends from './Trends';
+import Topics from './Topics';
 
 const Container = styled.div`
     height: 100%;
@@ -36,6 +38,7 @@ const DEFAULT_TAB = 'manageDocuments';
 
 const Nav = (props) => {
     const [activeTab, setActiveTab] = useState(DEFAULT_TAB)
+    const [activeTransactionId, setActiveTransactionId] = useState(undefined);
 
     const contents = {
         'manageDocuments': (
@@ -43,6 +46,16 @@ const Nav = (props) => {
                 <h3>Upload Document</h3>
                 <DocumentUpload/>
                 <DocumentList/>
+            </>
+        ),
+        'trends': (
+            <>
+                <Trends/>
+            </>
+        ),
+        'topics': (
+            <> 
+                <Topics transactionId={activeTransactionId} onTransactionChange={setActiveTransactionId} />
             </>
         )
     };
