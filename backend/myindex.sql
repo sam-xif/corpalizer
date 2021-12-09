@@ -3,16 +3,15 @@ CREATE DATABASE myindex;
 USE myindex;
 
 CREATE TABLE document (
-	document_id VARCHAR(100) PRIMARY KEY, -- this is a UUID
+	document_id VARCHAR(100) PRIMARY KEY,
     timestamp DATE
-    -- Add a filename or some pointer to a file, or just a TEXT field, but TEXT might be limiting though so I don't think that would work
 );
 
 CREATE TABLE paragraph (
 	paragraph_id INT PRIMARY KEY AUTO_INCREMENT,
     document_id VARCHAR(100),
     position_in_fullText INT,
-    CONSTRAINT paragraph_document_fk FOREIGN KEY (document_id) REFERENCES document(document_id)
+    CONSTRAINT paragraph_document_fk FOREIGN KEY (document_id) REFERENCES document(document_id) ON UPDATE RESTRICT ON DELETE CASCADE
 --    PRIMARY KEY (document_id, position_in_fullText)
 );
 
@@ -20,7 +19,7 @@ CREATE TABLE sentence (
 	sentence_id INT PRIMARY KEY AUTO_INCREMENT,
     paragraph_id INT,
     position_in_paragraph INT,
-    CONSTRAINT sentence_paragraph_fk FOREIGN KEY (paragraph_id) REFERENCES paragraph(paragraph_id)
+    CONSTRAINT sentence_paragraph_fk FOREIGN KEY (paragraph_id) REFERENCES paragraph(paragraph_id) ON UPDATE RESTRICT ON DELETE CASCADE
 );
 
 CREATE TABLE term (
@@ -36,8 +35,8 @@ CREATE TABLE document_term (
 	frequency INT,
     document_id VARCHAR(100),
     term_text VARCHAR(100),
-    CONSTRAINT document_term_fk1 FOREIGN KEY (document_id) REFERENCES document(document_id),
-    CONSTRAINT document_term_fk2 FOREIGN KEY (term_text) REFERENCES term(term_text)
+    CONSTRAINT document_term_fk1 FOREIGN KEY (document_id) REFERENCES document(document_id) ON UPDATE RESTRICT ON DELETE CASCADE,
+    CONSTRAINT document_term_fk2 FOREIGN KEY (term_text) REFERENCES term(term_text) ON UPDATE RESTRICT ON DELETE CASCADE
 );
 
 CREATE TABLE paragraph_term (
@@ -45,8 +44,8 @@ CREATE TABLE paragraph_term (
     frequency INT,
     paragraph_id INT,
     term_text VARCHAR(100),
-    CONSTRAINT paragraph_term_fk1 FOREIGN KEY (paragraph_id) REFERENCES paragraph(paragraph_id),
-    CONSTRAINT paragraph_term_fk2 FOREIGN KEY (term_text) REFERENCES term(term_text)
+    CONSTRAINT paragraph_term_fk1 FOREIGN KEY (paragraph_id) REFERENCES paragraph(paragraph_id) ON UPDATE RESTRICT ON DELETE CASCADE,
+    CONSTRAINT paragraph_term_fk2 FOREIGN KEY (term_text) REFERENCES term(term_text) ON UPDATE RESTRICT ON DELETE CASCADE
 );
 
 CREATE TABLE sentence_term (
@@ -54,9 +53,20 @@ CREATE TABLE sentence_term (
     frequency INT,
     sentence_id INT,
     term_text VARCHAR(100),
-    CONSTRAINT sentence_term_fk1 FOREIGN KEY (sentence_id) REFERENCES sentence(sentence_id),
-    CONSTRAINT sentence_term_fk2 FOREIGN KEY (term_text) REFERENCES term(term_text)
+    CONSTRAINT sentence_term_fk1 FOREIGN KEY (sentence_id) REFERENCES sentence(sentence_id) ON UPDATE RESTRICT ON DELETE CASCADE,
+    CONSTRAINT sentence_term_fk2 FOREIGN KEY (term_text) REFERENCES term(term_text) ON UPDATE RESTRICT ON DELETE CASCADE
 );
+
+DROP PROCEDURE IF EXISTS cleanup_terms;
+DELIMITER //
+CREATE PROCEDURE cleanup_terms()
+BEGIN
+    DROP TABLE IF EXISTS terms_to_delete;
+    CREATE TEMPORARY TABLE terms_to_delete (t VARCHAR(100));
+    INSERT INTO terms_to_delete SELECT term.term_text FROM term LEFT JOIN document_term USING (term_text) WHERE document_id IS NULL;
+    DELETE FROM term WHERE term_text IN (SELECT t FROM terms_to_delete);
+END //
+DELIMITER ;
 
 DROP PROCEDURE IF EXISTS recompute_all_document_tfidf_scores;
 DELIMITER //
@@ -67,7 +77,6 @@ BEGIN
     DECLARE term_text_var VARCHAR(100);
     DECLARE frequency_var INT;
     
-	-- calculate tfidf score of term in document
     DECLARE tf_numerator DOUBLE;
 	DECLARE tf_denominator DOUBLE;
     DECLARE tf DOUBLE;
@@ -86,7 +95,7 @@ BEGIN
 		FETCH document_term_cursor INTO frequency_var, document_id_var, term_text_var;
 
 		SET tf_numerator = frequency_var;
-		SELECT IFNULL(SUM(frequency), 0) INTO tf_denominator FROM document_term WHERE document_id = document_id_var; -- also add the new frequency
+		SELECT IFNULL(SUM(frequency), 0) INTO tf_denominator FROM document_term WHERE document_id = document_id_var;
 		SET tf = tf_numerator / tf_denominator;
 			 
 		SELECT COUNT(*) INTO idf_numerator FROM document;
@@ -109,7 +118,6 @@ BEGIN
     DECLARE term_text_var VARCHAR(100);
     DECLARE frequency_var INT;
     
-	-- calculate tfidf score of term in document
     DECLARE tf_numerator DOUBLE;
 	DECLARE tf_denominator DOUBLE;
     DECLARE tf DOUBLE;
@@ -151,7 +159,6 @@ BEGIN
     DECLARE term_text_var VARCHAR(100);
     DECLARE frequency_var INT;
     
-	-- calculate tfidf score of term in document
     DECLARE tf_numerator DOUBLE;
 	DECLARE tf_denominator DOUBLE;
     DECLARE tf DOUBLE;

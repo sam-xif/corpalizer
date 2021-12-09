@@ -1,17 +1,16 @@
 import os
 import uuid
-from collections import Counter
-from datetime import datetime
 from flask import request, current_app as app
 from flask_restful import Resource, reqparse
 from api.services import (
-    break_document_into_paragraphs,
-    break_paragraph_into_sentences,
-    process_raw_document_into_terms,
     generate_topics,
+    insert_document,
+    recompute_tfidf_scores,
 )
-from itertools import chain
 import math
+from datetime import timedelta
+from threading import Thread, Lock
+import pymysql
 
 
 class DocumentRetrieveUpdateDeleteResource(Resource):
@@ -34,31 +33,7 @@ class DocumentRetrieveUpdateDeleteResource(Resource):
         :param doc_uuid:
         :return:
         """
-        pass
-
-    def delete(self, doc_uuid):
-        """
-        Deletes document, from filesystem and from database
-        :param doc_uuid:
-        :return:
-        """
-        pass
-
-
-class DocumentListCreateResource(Resource):
-    def get(self):
-        from src.api import get_mysql
-        cur = get_mysql().connection.cursor()
-
-        cur.execute('SELECT document_id, timestamp FROM document LIMIT 1000')
-        tuples = cur.fetchall()
-
-        return {
-            'documents': [{'id': doc_id, 'date': date.strftime('%Y-%m-%d')} for doc_id, date in tuples]
-        }, 200
-
-    def post(self):
-        from src.api import get_mysql
+        from api import get_mysql
 
         parser = reqparse.RequestParser()
         parser.add_argument('content')
@@ -69,76 +44,105 @@ class DocumentListCreateResource(Resource):
                 'error': 'no content'
             }, 400
 
-        doc_uuid = uuid.uuid4()
+        try:
+            cur = get_mysql().connection.cursor()
+
+            cur.execute('DELETE FROM document WHERE document_id = %s', (doc_uuid,))
+            insert_document(doc_uuid, text, cur)
+            recompute_tfidf_scores(cur)
+            cur.callproc('cleanup_terms')
+        except pymysql.err.OperationalError as e:
+            get_mysql().connection.rollback()
+            return {
+                'error': str(e)
+                   }, 500
+        else:
+            get_mysql().connection.commit()
+            with open(os.path.join(app.config['documents_dir'], '{}.txt'.format(doc_uuid)), 'w+') as f:
+                f.write(text)
+            TopicsResource.invalidate_cache()
+
+            return None, 204
+
+    def delete(self, doc_uuid):
+        """
+        Deletes document, from filesystem and from database
+        :param doc_uuid:
+        :return:
+        """
+        from api import get_mysql
+
+        try:
+            cur = get_mysql().connection.cursor()
+
+            cur.execute('DELETE FROM document WHERE document_id = %s', (doc_uuid,))
+            recompute_tfidf_scores(cur)
+            cur.callproc('cleanup_terms')
+        except pymysql.err.OperationalError as e:
+            get_mysql().connection.rollback()
+            return {
+                'error': str(e)
+            }, 500
+        else:
+            get_mysql().connection.commit()
+            try:
+                os.remove(os.path.join(app.config['documents_dir'], '{}.txt'.format(doc_uuid)))
+            except FileNotFoundError:
+                print("Corresponding file wasn't found")
+            TopicsResource.invalidate_cache()
+            return None, 204
+
+
+class DocumentListCreateResource(Resource):
+    def get(self):
+        from api import get_mysql
         cur = get_mysql().connection.cursor()
 
-        # Create file
-        with open(os.path.join(app.config['documents_dir'], '{}.txt'.format(doc_uuid)), 'w+') as f:
-            f.write(text)
+        cur.execute('SELECT document_id, timestamp FROM document LIMIT 1000')
+        tuples = cur.fetchall()
 
-        # create db record
-        cur.execute('INSERT INTO document (document_id, timestamp) VALUES (%s, %s)', (doc_uuid, datetime.now()))
+        return {
+            'documents': [{'id': doc_id, 'date': date.strftime('%Y-%m-%d')} for doc_id, date in tuples]
+        }, 200
 
-        # Break document down into paragraphs and sentences and create those records
-        paragraphs = break_document_into_paragraphs(text)
-        if len(paragraphs) > 0:
-            cur.execute('INSERT INTO paragraph (document_id, position_in_fulltext) VALUES ' + ','.join(['(%s, %s)' for i in range(len(paragraphs))]),
-                        tuple(chain.from_iterable(((str(doc_uuid), p[0]) for p in paragraphs))))
-        # TODO: create linkage between terms and paragraphs here
-        for start, end, paragraph_text in paragraphs:
-            cur.execute('SELECT paragraph_id FROM paragraph WHERE document_id = %s AND position_in_fullText = %s', (str(doc_uuid), start))
-            paragraph_id, = cur.fetchone()
+    def post(self):
+        from api import get_mysql
 
-            # The following four lines are abstractable
-            terms = process_raw_document_into_terms(paragraph_text)
-            if len(terms) > 0:
-                cur.execute('INSERT IGNORE INTO term (term_text) VALUES ' + ','.join(['(%s)' for i in range(len(terms))]), tuple(terms))
-                cnt = Counter(terms)
-                cur.execute('INSERT INTO paragraph_term (frequency, paragraph_id, term_text) VALUES ' + ','.join(
-                    ['(%s, %s, %s)' for i in range(len(cnt.most_common()))]),
-                            tuple(chain.from_iterable((f, paragraph_id, t) for t, f in cnt.most_common())))
+        parser = reqparse.RequestParser()
+        parser.add_argument('content')
+        parser.add_argument('auto_recompute_scores')
+        args = parser.parse_args()
+        text = args.content
+        auto_recompute_scores = bool(args.auto_recompute_scores) if args.auto_recompute_scores is not None else True
+        if text is None:
+            return {
+                'error': 'no content'
+            }, 400
 
-        cur.execute('SELECT paragraph_id, position_in_fulltext FROM paragraph WHERE document_id = %s', (doc_uuid,))
-        for paragraph_id, position_in_fulltext in cur.fetchall():
-            sentences = break_paragraph_into_sentences([text for s, e, text in paragraphs if s == position_in_fulltext][0])
-            if len(sentences) > 0:
-                cur.execute('INSERT INTO sentence (paragraph_id, position_in_paragraph) VALUES ' + ','.join(['(%s, %s)' for i in range(len(sentences))]),
-                            tuple(chain.from_iterable(((str(paragraph_id), s[0]) for s in sentences))))
+        doc_uuid = uuid.uuid4()
+        try:
+            cur = get_mysql().connection.cursor()
 
-            for start, end, sentence_text in sentences:
-                cur.execute('SELECT sentence_id FROM sentence WHERE paragraph_id = %s AND position_in_paragraph = %s',
-                            (paragraph_id, start))
-                sentence_id, = cur.fetchone()
+            # Create file
+            with open(os.path.join(app.config['documents_dir'], '{}.txt'.format(doc_uuid)), 'w+') as f:
+                f.write(text)
 
-                terms = process_raw_document_into_terms(sentence_text)
-                if len(terms) > 0:
-                    cur.execute(
-                        'INSERT IGNORE INTO term (term_text) VALUES ' + ','.join(['(%s)' for i in range(len(terms))]),
-                        tuple(terms))
-                    cnt = Counter(terms)
-                    cur.execute('INSERT INTO sentence_term (frequency, sentence_id, term_text) VALUES ' + ','.join(
-                        ['(%s, %s, %s)' for i in range(len(cnt.most_common()))]),
-                                tuple(chain.from_iterable((f, sentence_id, t) for t, f in cnt.most_common())))
-
-        # process raw text into a list of unique stemmed words to be added to terms
-        # add the terms that dont already exist to the db, and then add document_term links
-        terms = process_raw_document_into_terms(text)
-        if len(terms) > 0:
-            cur.execute('INSERT IGNORE INTO term (term_text) VALUES ' + ','.join(['(%s)' for i in range(len(terms))]), tuple(terms))
-            cnt = Counter(terms)
-            cur.execute('INSERT INTO document_term (frequency, document_id, term_text) VALUES ' + ','.join(['(%s, %s, %s)' for i in range(len(cnt.most_common()))]),
-                        tuple(chain.from_iterable((f, str(doc_uuid), t) for t, f in cnt.most_common())))
-
-        cur.callproc('recompute_all_document_tfidf_scores')
-        cur.callproc('recompute_all_paragraph_tfidf_scores')
-        cur.callproc('recompute_all_sentence_tfidf_scores')
-
-        get_mysql().connection.commit()
+            insert_document(doc_uuid, text, cur)
+            if auto_recompute_scores:
+                recompute_tfidf_scores(cur)
+        except pymysql.err.OperationalError as e:
+            get_mysql().connection.rollback()
+            return {
+                'error': str(e)
+            }, 500
+        else:
+            get_mysql().connection.commit()
+            TopicsResource.invalidate_cache()
 
         # Return document uuid as response
-        return {
-            'doc_uuid': str(doc_uuid)
-        }, 201
+            return {
+                'doc_uuid': str(doc_uuid)
+            }, 201
 
 
 class TrendsResource(Resource):
@@ -155,11 +159,11 @@ class TrendsResource(Resource):
     BIN_YEAR = 'year'
 
     def get(self, granularity, term_text):
-        from src.api import get_mysql
+        from api import get_mysql
 
         cur = get_mysql().connection.cursor()
 
-        bin_type = request.args.get('bin_type')
+        bin_type = request.args.get('bin_type', self.BIN_DAY)
 
         if granularity == self.GRANULARITY_DOCUMENT:
             cur.execute('SELECT frequency, timestamp FROM document_term JOIN document USING (document_id) WHERE term_text = %s', (term_text,))
@@ -198,10 +202,25 @@ class TrendsResource(Resource):
 
 
 class TopicsResource(Resource):
-    def get(self):
-        from src.api import get_mysql
+    topic_thread = None
+    topic_thread_lock = Lock()
 
-        cur = get_mysql().connection.cursor()
+    cached_result = None
+    cached_result_lock = Lock()
+
+    cancel_token = None
+    cancel_token_lock = Lock()
+
+    @classmethod
+    def invalidate_cache(cls):
+        pass
+
+    @classmethod
+    def _compute_topics(cls, cancellation_token, cancellation_token_lock):
+        from api import pymysql_connect_kwargs
+        conn = pymysql.connect(**pymysql_connect_kwargs)
+
+        cur = conn.cursor()
 
         cur.execute('SELECT term_text FROM term')
         terms_list = [x[0] for x in cur.fetchall()]
@@ -226,8 +245,117 @@ class TopicsResource(Resource):
             product = math.pow(product, 1 / len(scores))
             return product
 
-        print('here!')
+        def set_progress(progress):
+            cls.topic_thread_lock.acquire()
+            _, thread = cls.topic_thread
+            cls.topic_thread = (progress, thread)
+            cls.topic_thread_lock.release()
+
+        def poll_cancel():
+            cancellation_token_lock.acquire()
+            ret = cancellation_token[0]
+            cancellation_token_lock.release()
+            return ret
+
+        try:
+            results = generate_topics(
+                terms_list,
+                similarity_score_fn,
+                geometric_mean_of_tfidf_scores_for_term_fn,
+                set_progress_callback=set_progress,
+                poll_cancel=poll_cancel,
+            )
+
+            cls.cached_result_lock.acquire()
+            cls.cached_result = results
+            cls.cached_result_lock.release()
+        except Exception as e:
+            pass
+
+        cur.close()
+        conn.close()
+
+    @classmethod
+    def get(cls):
+        parser = reqparse.RequestParser()
+        parser.add_argument('cancel')
+        args = parser.parse_args()
+
+        cancel = bool(args.cancel) if args.cancel is not None else None
+
+        cls.cached_result_lock.acquire()
+        if cls.cached_result is not None:
+            result = cls.cached_result
+            cls.cached_result_lock.release()
+            cls.topic_thread_lock.acquire()
+            if cls.topic_thread is not None:
+                cls.topic_thread = None
+            cls.topic_thread_lock.release()
+            return {
+                   'status': 'done',
+                   'result': result
+               }, 200
+        cls.cached_result_lock.release()
+
+        cls.topic_thread_lock.acquire()
+        if cls.topic_thread is not None:
+            if cancel is True:
+                cls.cancel_token_lock.acquire()
+                cls.cancel_token[0] = True
+                cls.cancel_token_lock.release()
+
+                _, thread = cls.topic_thread
+
+                # release while waiting for thread to stop
+                cls.topic_thread_lock.release()
+                thread.join()
+                cls.cancel_token_lock.acquire()
+
+                cls.topic_thread = None
+                cls.topic_thread_lock.release()
+                return {
+                    'status': 'cancelled',
+                }, 200
+
+            progress = cls.topic_thread[0]
+            cls.topic_thread_lock.release()
+            return {
+                'status': 'running',
+                'progress': progress,
+            }, 200
+
+        cls.topic_thread_lock.release()
+
+        if cancel is True:
+            return {
+                'error': 'No currently running process to cancel'
+            }, 400
+
+        cls.cancel_token = [False]
+        thread = Thread(target=cls._compute_topics, args=(cls.cancel_token, cls.cancel_token_lock))
+        thread.start()
+        cls.topic_thread = (0, thread)
 
         return {
-            'data': generate_topics(terms_list, similarity_score_fn, geometric_mean_of_tfidf_scores_for_term_fn)
-        }
+            'status': 'started',
+            'progress': 0,
+        }, 200
+
+
+class RPCResource(Resource):
+    def post(self, function):
+        from api import get_mysql
+
+        cur = get_mysql().connection.cursor()
+
+        if function == 'recompute_tfidf_scores':
+            recompute_tfidf_scores(cur)
+            get_mysql().connection.commit()
+
+            return {
+                'status': 'success'
+            }, 200
+
+        return {
+            'error': 'Unknown procedure ' + function
+        }, 400

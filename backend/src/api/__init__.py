@@ -4,14 +4,14 @@ from flask import Flask
 from flask_restful import Api
 from flask_pymysql import MySQL
 
-from api.resources import DocumentListCreateResource, DocumentRetrieveUpdateDeleteResource, TrendsResource, TopicsResource
-
-
-pymysql_connect_kwargs = {'user': 'root',
-                          'password': '',
-                          'host': '127.0.0.1',
-                          'database': 'myindex'}
-
+from api.resources import (
+    DocumentListCreateResource,
+    DocumentRetrieveUpdateDeleteResource,
+    TrendsResource,
+    TopicsResource,
+    RPCResource,
+)
+from config import pymysql_connect_kwargs
 
 _mysql = None
 
@@ -32,9 +32,18 @@ def create_app():
     api.add_resource(DocumentRetrieveUpdateDeleteResource, '/doc/<string:doc_uuid>')
     api.add_resource(TrendsResource, '/trends/<string:granularity>/<string:term_text>')
     api.add_resource(TopicsResource, '/topics')
+    api.add_resource(RPCResource, '/rpc/<string:function>')
 
     mysql = MySQL()
     mysql.init_app(app)
     _mysql = mysql
+
+    @app.after_request
+    def after_request(response):
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', '*')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
+        response.headers.add('Referrer-Policy', 'no-referrer')
+        return response
 
     return app
