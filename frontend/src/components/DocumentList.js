@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import DocumentCard from './DocumentCard';
 import UpdateDocumentForm from './UpdateDocumentForm';
+import { buildUrl } from '../utils';
 
 const DocumentList = (props) => {
     const [documents, setDocuments] = useState([]);
     const [updatingDocUuid, setUpdatingDocUuid] = useState(undefined);
 
     const fetchDocs = () => {
-        axios.get('http://localhost:5000/doc')
+        axios.get(buildUrl(`doc`))
         .then(results => {
             const data = results.data;
             setDocuments(data.documents);

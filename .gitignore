@@ -1,3 +1,4 @@
 .idea/
 static/
 /backend/src/config.py
+/frontend/.env

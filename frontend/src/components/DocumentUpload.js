@@ -1,6 +1,7 @@
 import axios from 'axios';
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
+import { buildUrl } from '../utils';
 
 const reader = new FileReader();
 const SUCCESS = 'Upload succeeded';
@@ -25,7 +26,7 @@ const DocumentUpload = (props) => {
                 reader.onload = (e) => {
                     const text = e.target.result.toString();
 
-                    axios.post('http://localhost:5000/doc', { content: text }, { params: { auto_recompute_scores: false }})
+                    axios.post(buildUrl(`doc`), { content: text }, { params: { auto_recompute_scores: false }})
                     .then(result => {
                         setUploadProgress(uploadProgress + 1);
                     })
@@ -37,7 +38,7 @@ const DocumentUpload = (props) => {
                 }
 
                 if (uploadProgress === files.length) {
-                    axios.post('http://localhost:5000/rpc/recompute_tfidf_scores')
+                    axios.post(buildUrl(`rpc/recompute_tfidf_scores`))
                     .then(() => {
                         setUploadStatus(SUCCESS);
                         setUploadProgress(undefined);

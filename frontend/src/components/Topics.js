@@ -1,6 +1,7 @@
 import axios from 'axios';
 import React, { useEffect, useState, useRef } from 'react';
 import styled from 'styled-components';
+import { buildUrl } from '../utils';
 
 const TermBox = styled.span`
     display: inline-block;
@@ -16,7 +17,7 @@ const Topics = ({ isStarted, onStart, onFinish, onViewInTrends }) => {
     const progressPollIntervalId = useRef(null);
 
     const getProgress = () => {
-        axios.get('http://localhost:5000/topics')
+        axios.get(buildUrl('topics'))
         .then(result => {
             const data = result.data;
             if (data.status === 'running') {
@@ -55,7 +56,7 @@ const Topics = ({ isStarted, onStart, onFinish, onViewInTrends }) => {
                 If any records are created, updated, or deleted, the cached result will be invalidated and topics will have to be regenerated.
             </p>
             <button onClick={() => {
-                axios.get('http://localhost:5000/topics')
+                axios.get(buildUrl('topics'))
                 .then(result => {
                     const data = result.data;
                     onStart();
@@ -65,7 +66,7 @@ const Topics = ({ isStarted, onStart, onFinish, onViewInTrends }) => {
                 })
             }}>Start</button>
             {isStarted && (<button onClick={() => {
-                axios.get('http://localhost:5000/topics', { params: { cancel: true }})
+                axios.get(buildUrl('topics'), { params: { cancel: true }})
                 .then(result => {
                     const data = result.data;
                     if (data.status === 'cancelled') {

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import moment from 'moment';
 import _ from 'lodash';
+import { buildUrl } from '../utils';
 
 import {
     CartesianGrid,
@@ -9,7 +10,6 @@ import {
     ResponsiveContainer,
     Line,
     LineChart,
-    Tooltip,
     XAxis,
     YAxis,
 } from 'recharts';
@@ -61,7 +61,7 @@ const Trends = ({ query, onQueryChange }) => {
 
     useEffect(() => {
         const terms = query.split(',');
-        Promise.all(terms.map(term => axios.get(`http://localhost:5000/trends/${granularity}/${term}`, { params: {
+        Promise.all(terms.map(term => axios.get(buildUrl(`trends/${granularity}/${term}`), { params: {
             bin_type: bin
         }}))).then(results => {
             const fullData = {};
@@ -109,7 +109,6 @@ const Trends = ({ query, onQueryChange }) => {
                         name="Time" 
                         type="number" 
                         tickFormatter={tickFormatter}
-                        // label={{ value: "Time", dy: 10 }} 
                     />
                     <YAxis name="Freq" label={{ value: "Freq", dx: -10 }} allowDecimals={false}/>
                     <Legend/>

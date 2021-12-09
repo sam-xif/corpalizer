@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import axios from 'axios';
+import { buildUrl } from '../utils';
 
 const Card = styled.div`
     border-radius: 10px;
@@ -38,7 +39,7 @@ const DocumentCard = ({ docUuid, timestamp, onDelete, onUpdate }) => {
     const [deletionStatus, setDeletionStatus] = useState(NONE);
 
     useEffect(() => {
-        axios.get(`http://localhost:5000/doc/${docUuid}`)
+        axios.get(buildUrl(`doc/${docUuid}`))
         .then(result => {
             const data = result.data;
             setPreview(data.content)
@@ -47,7 +48,7 @@ const DocumentCard = ({ docUuid, timestamp, onDelete, onUpdate }) => {
 
     useEffect(() => {
         if (deletionStatus == 'deleting') {
-            axios.delete(`http://localhost:5000/doc/${docUuid}`)
+            axios.delete(buildUrl(`doc/${docUuid}`))
             .then(result => {
                 onDelete();
             })
