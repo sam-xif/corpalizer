@@ -50,8 +50,9 @@ const Topics = ({ isStarted, onStart, onFinish, onViewInTrends }) => {
             <h3>Topics</h3>
             <p>
                 Generating topics is an expensive operation that can take many minutes, so it has been made to happen asynchronously
-                on the backend. Press the button below to trigger a new topic generation. Feel free to navigate to other pages in the app,
-                but if you close the webpage then you may not be able to access the results once they are generated.
+                on the backend. Press the button below to trigger a new topic generation. Feel free to navigate to other pages in the app.
+                If you close the webpage and come back, you will have to press the start button again to access the cached result.
+                If any records are created, updated, or deleted, the cached result will be invalidated and topics will have to be regenerated.
             </p>
             <button onClick={() => {
                 axios.get('http://localhost:5000/topics')

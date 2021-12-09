@@ -94,12 +94,14 @@ const Trends = ({ query, onQueryChange }) => {
             <RadioGroup name="bin" buttonConfig={configFromObject(BIN)} value={bin} onChange={setBin}/>
             <p>Terms:</p>
             <p>Write terms comma separated with no space like this: "cost,event"</p>
-            <input type="text" value={query} onChange={_.debounce((e) => {
+            <input type="text" value={query} onChange={(e) => {
+                console.log(e.target.value);
                 onQueryChange(e.target.value);
-            }, 200)} />
+            }} />
             <h3>Chart</h3>
             <ResponsiveContainer width="100%" height={500}>
                 <LineChart>
+                    <CartesianGrid/>
                     {query.split(',').map((term, i) => <Line data={trendsData[term]} key={term} dataKey={term} stroke={colors[i % colors.length]} />)}
                     <XAxis 
                         dataKey="time" 

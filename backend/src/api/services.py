@@ -9,7 +9,6 @@ from nltk import RegexpTokenizer
 from nltk.stem import PorterStemmer
 from nltk.corpus import stopwords
 from pysbd import Segmenter
-from tqdm import tqdm
 from itertools import chain
 from collections import Counter
 from datetime import datetime

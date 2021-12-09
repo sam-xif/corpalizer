@@ -189,9 +189,8 @@ class TrendsResource(Resource):
             self.BIN_MONTH: '%Y-%m',
             self.BIN_YEAR: '%Y',
         }
-        import random
         for freq, date in freq_date_pairs:
-            key = (date - timedelta(days=random.randint(1, 100))).strftime(date_format[bin_type])
+            key = date.strftime(date_format[bin_type])
             if key in date_to_freq_map:
                 date_to_freq_map[key] += freq
             else:

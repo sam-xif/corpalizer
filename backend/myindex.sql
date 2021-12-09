@@ -217,4 +217,3 @@ BEGIN
 	SELECT DISTINCT t1.term_text, t2.term_text, compute_similarity_score(t1.term_text, t2.term_text) FROM term as t1 CROSS JOIN term as t2 WHERE t1.term_text < t2.term_text;
 END //
 DELIMITER ;
-

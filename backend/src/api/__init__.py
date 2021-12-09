@@ -3,7 +3,6 @@ import os
 from flask import Flask
 from flask_restful import Api
 from flask_pymysql import MySQL
-from flask_cors import CORS
 
 from api.resources import (
     DocumentListCreateResource,
@@ -12,13 +11,7 @@ from api.resources import (
     TopicsResource,
     RPCResource,
 )
-
-
-pymysql_connect_kwargs = {'user': 'root',
-                          'password': '',
-                          'host': '127.0.0.1',
-                          'database': 'myindex'}
-
+from config import pymysql_connect_kwargs
 
 _mysql = None
 
