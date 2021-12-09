@@ -47,11 +47,12 @@ const RadioGroup = ({ name, buttonConfig, value, onChange }) => {
     );
 };
 
-const Trends = (props) => {
+const Trends = ({ query, onQueryChange }) => {
     const [granularity, setGranularity] = useState(GRANULARITY.DOCUMENT);
     const [bin, setBin] = useState(BIN.DAY);
     const [trendsData, setTrendsData] = useState({});
-    const [terms, setTerms] = useState([]);
+    
+    const terms = query.split(',');
 
     const configFromObject = (obj) => {
         return Object.keys(obj).reduce((soFar, next) => {
@@ -97,9 +98,8 @@ const Trends = (props) => {
             <RadioGroup name="bin" buttonConfig={configFromObject(BIN)} value={bin} onChange={setBin}/>
             <p>Terms:</p>
             <p>Write terms comma separated with no space like this: "cost,event"</p>
-            <input type="text" onChange={_.debounce((e) => {
-                const terms = e.target.value.split(',');
-                setTerms(terms);
+            <input type="text" value={query} onChange={_.debounce((e) => {
+                onQueryChange(e.target.value);
             }, 200)} />
             <h3>Chart</h3>
             <ResponsiveContainer width="100%" height={500}>

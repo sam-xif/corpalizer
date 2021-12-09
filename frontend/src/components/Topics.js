@@ -1,9 +1,9 @@
 import axios from 'axios';
 import React, { useEffect, useState, useRef } from 'react';
 
-const Topics = ({ transactionId, onTransactionChange }) => {
+const Topics = ({ transactionId, onTransactionChange, onViewInTrends }) => {
     const [progress, setProgress] = useState('N/A');
-    const [result, setResult] = useState(undefined);
+    const [result, setResult] = useState();
     const progressPollIntervalId = useRef(null);
 
     const getProgress = () => {
@@ -71,9 +71,12 @@ const Topics = ({ transactionId, onTransactionChange }) => {
             <p>Progress: {progress}</p>
             {result && result.map((topic, i) => (
                 <>
-                    <h5>Topic {i + 1}</h5>
+                    <h4>Topic {i + 1}</h4>
+                    <button style={{ display: 'inline'}} onClick={() => {
+                        onViewInTrends(topic);
+                    }}>View In Trends</button>
                     <ul>
-                        {topic.map(term => <li>term</li>)}
+                        {topic.map(term => <li>{term}</li>)}
                     </ul>
                 </>
             ))}

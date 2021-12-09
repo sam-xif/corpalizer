@@ -39,6 +39,7 @@ const DEFAULT_TAB = 'manageDocuments';
 const Nav = (props) => {
     const [activeTab, setActiveTab] = useState(DEFAULT_TAB)
     const [activeTransactionId, setActiveTransactionId] = useState(undefined);
+    const [trendsQuery, setTrendsQuery] = useState('');
 
     const contents = {
         'manageDocuments': (
@@ -50,12 +51,15 @@ const Nav = (props) => {
         ),
         'trends': (
             <>
-                <Trends/>
+                <Trends query={trendsQuery} onQueryChange={setTrendsQuery} />
             </>
         ),
         'topics': (
             <> 
-                <Topics transactionId={activeTransactionId} onTransactionChange={setActiveTransactionId} />
+                <Topics transactionId={activeTransactionId} onTransactionChange={setActiveTransactionId} onViewInTrends={(topic) => {
+                    setActiveTab('trends');
+                    setTrendsQuery(topic.join(','));
+                }} />
             </>
         )
     };

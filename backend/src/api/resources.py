@@ -94,6 +94,8 @@ class DocumentListCreateResource(Resource):
     def post(self):
         from api import get_mysql
 
+        # TODO: Add a param to suppress auto recomputation of tfidf scores
+
         parser = reqparse.RequestParser()
         parser.add_argument('content')
         args = parser.parse_args()

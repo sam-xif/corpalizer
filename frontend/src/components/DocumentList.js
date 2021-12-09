@@ -7,13 +7,18 @@ const DocumentList = (props) => {
     const [documents, setDocuments] = useState([]);
     const [updatingDocUuid, setUpdatingDocUuid] = useState(undefined);
 
-    useEffect(() => {
+    const fetchDocs = () => {
         axios.get('http://localhost:5000/doc')
         .then(results => {
             const data = results.data;
             setDocuments(data.documents);
         })
+    }
+    
+    useEffect(() => {
+        fetchDocs();
     }, []);
+    
 
     return (
         <div>
@@ -24,6 +29,7 @@ const DocumentList = (props) => {
                 </>
             )}
             <h3>All Documents</h3>
+            <button style={{ marginBottom: '8px' }} onClick={fetchDocs}>Refresh</button>
             {documents.map(({id, date}, idx) => (
                 <DocumentCard key={id} docUuid={id} timestamp={date} onDelete={() => {
                     axios.delete(`http://localhost:5000/doc/${id}`);
