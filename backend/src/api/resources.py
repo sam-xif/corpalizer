@@ -10,6 +10,7 @@ from api.services import (
 import math
 from datetime import timedelta
 from threading import Thread, Lock
+from nltk.stem import PorterStemmer
 import pymysql
 
 
@@ -161,6 +162,9 @@ class TrendsResource(Resource):
     def get(self, granularity, term_text):
         from api import get_mysql
 
+        stemmer = PorterStemmer()
+        stemmed_term_text = stemmer.stem(term_text, to_lowercase=True)
+
         cur = get_mysql().connection.cursor()
 
         bin_type = request.args.get('bin_type', self.BIN_DAY)
@@ -171,12 +175,12 @@ class TrendsResource(Resource):
         elif granularity == self.GRANULARITY_PARAGRAPH:
             cur.execute(
                 'SELECT frequency, timestamp FROM paragraph_term JOIN paragraph USING (paragraph_id) JOIN document USING (document_id) WHERE term_text = %s',
-                (term_text,))
+                (stemmed_term_text,))
             freq_date_pairs = cur.fetchall()
         elif granularity == self.GRANULARITY_SENTENCE:
             cur.execute(
                 'SELECT frequency, timestamp FROM sentence_term JOIN sentence USING (sentence_id) JOIN paragraph USING (paragraph_id) JOIN document USING (document_id) WHERE term_text = %s',
-                (term_text,))
+                (stemmed_term_text,))
             freq_date_pairs = cur.fetchall()
         else:
             return {
