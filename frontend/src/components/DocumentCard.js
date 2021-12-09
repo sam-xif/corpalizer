@@ -23,16 +23,43 @@ const PreviewBox = styled.p`
     word-break: break-all;
 `;
 
+const DeleteText = styled.span`
+    margin-left: 8px;
+    color:red;
+`;
+
+const NONE = null;
+const DELETING = 'deleting';
+const DELETION_FAILED = 'fail';
+
 
 const DocumentCard = ({ docUuid, timestamp, onDelete, onUpdate }) => {
     const [preview, setPreview] = useState(null);
+    const [deletionStatus, setDeletionStatus] = useState(NONE);
+
     useEffect(() => {
         axios.get(`http://localhost:5000/doc/${docUuid}`)
-        .then(results => {
-            const data = results.data;
+        .then(result => {
+            const data = result.data;
             setPreview(data.content)
         })
     }, [])
+
+    useEffect(() => {
+        if (deletionStatus == 'deleting') {
+            axios.delete(`http://localhost:5000/doc/${docUuid}`)
+            .then(result => {
+                onDelete();
+            })
+            .catch(() => {
+                setDeletionStatus(DELETION_FAILED);
+            })
+        }
+    }, [deletionStatus])
+
+    const handleDelete = () => {
+        setDeletionStatus(DELETING);
+    }
 
     return (
         <Card>
@@ -50,7 +77,11 @@ const DocumentCard = ({ docUuid, timestamp, onDelete, onUpdate }) => {
                     </div>
                 )}
                 <div>
-                    <a href="javascript:void(0);" onClick={onDelete}>Delete</a>
+                    <a href="javascript:void(0);" onClick={handleDelete}>Delete</a>
+                    {deletionStatus !== NONE 
+                    && (<DeleteText>
+                        {deletionStatus === DELETING ? 'Deletion in progress...': 'Deletion failed, likely because of deadlock. Try again later'}
+                    </DeleteText>)}
                     <br/>
                     <a href="javascript:void(0);" onClick={onUpdate}>Update</a>
                 </div>

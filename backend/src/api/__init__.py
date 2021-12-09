@@ -5,7 +5,13 @@ from flask_restful import Api
 from flask_pymysql import MySQL
 from flask_cors import CORS
 
-from api.resources import DocumentListCreateResource, DocumentRetrieveUpdateDeleteResource, TrendsResource, TopicsResource
+from api.resources import (
+    DocumentListCreateResource,
+    DocumentRetrieveUpdateDeleteResource,
+    TrendsResource,
+    TopicsResource,
+    RPCResource,
+)
 
 
 pymysql_connect_kwargs = {'user': 'root',
@@ -33,6 +39,7 @@ def create_app():
     api.add_resource(DocumentRetrieveUpdateDeleteResource, '/doc/<string:doc_uuid>')
     api.add_resource(TrendsResource, '/trends/<string:granularity>/<string:term_text>')
     api.add_resource(TopicsResource, '/topics')
+    api.add_resource(RPCResource, '/rpc/<string:function>')
 
     mysql = MySQL()
     mysql.init_app(app)

@@ -32,7 +32,6 @@ const DocumentList = (props) => {
             <button style={{ marginBottom: '8px' }} onClick={fetchDocs}>Refresh</button>
             {documents.map(({id, date}, idx) => (
                 <DocumentCard key={id} docUuid={id} timestamp={date} onDelete={() => {
-                    axios.delete(`http://localhost:5000/doc/${id}`);
                     documents.splice(idx, 1);
                     setDocuments([...documents]);
                 }} onUpdate={() => {

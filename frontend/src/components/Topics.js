@@ -1,17 +1,22 @@
 import axios from 'axios';
 import React, { useEffect, useState, useRef } from 'react';
+import styled from 'styled-components';
 
-const Topics = ({ transactionId, onTransactionChange, onViewInTrends }) => {
+const TermBox = styled.span`
+    display: inline-block;
+    margin: 4px;
+    padding: 4px;
+    border: 1px solid black;
+    border-radius: 4px;
+`;
+
+const Topics = ({ isStarted, onStart, onFinish, onViewInTrends }) => {
     const [progress, setProgress] = useState('N/A');
     const [result, setResult] = useState();
     const progressPollIntervalId = useRef(null);
 
     const getProgress = () => {
-        if (transactionId === undefined) {
-            return;
-        }
-        
-        axios.get('http://localhost:5000/topics', { params: { transaction_id: transactionId } })
+        axios.get('http://localhost:5000/topics')
         .then(result => {
             const data = result.data;
             if (data.status === 'running') {
@@ -19,12 +24,13 @@ const Topics = ({ transactionId, onTransactionChange, onViewInTrends }) => {
             } else if (data.status === 'done') {
                 setResult(data.result);
                 setProgress('100%');
+                onFinish();
             }
         })
     }
 
     useEffect(() => {
-        if (transactionId !== undefined && !result) {
+        if (isStarted && !result) {
             if (progressPollIntervalId.current !== null) {
                 clearInterval(progressPollIntervalId.current);
             }
@@ -37,7 +43,7 @@ const Topics = ({ transactionId, onTransactionChange, onViewInTrends }) => {
             }
             progressPollIntervalId.current = null;
         }
-    }, [transactionId, result]);
+    }, [isStarted, result]);
 
     return (
         <>
@@ -51,23 +57,22 @@ const Topics = ({ transactionId, onTransactionChange, onViewInTrends }) => {
                 axios.get('http://localhost:5000/topics')
                 .then(result => {
                     const data = result.data;
-                    onTransactionChange(data.transaction_id);
+                    onStart();
                 })
                 .catch(() => {
                     console.error('Error when starting new topic gen')
                 })
             }}>Start</button>
-            {transactionId !== undefined && (<button onClick={() => {
+            {isStarted && (<button onClick={() => {
                 axios.get('http://localhost:5000/topics', { params: { cancel: true }})
                 .then(result => {
                     const data = result.data;
                     if (data.status === 'cancelled') {
                         setProgress('N/A');
-                        onTransactionChange(undefined);
+                        onFinish();
                     }
                 })
             }}>Cancel</button>)}
-            {transactionId !== undefined && <p>Transaction Id: {transactionId}</p>}
             <p>Progress: {progress}</p>
             {result && result.map((topic, i) => (
                 <>
@@ -75,9 +80,9 @@ const Topics = ({ transactionId, onTransactionChange, onViewInTrends }) => {
                     <button style={{ display: 'inline'}} onClick={() => {
                         onViewInTrends(topic);
                     }}>View In Trends</button>
-                    <ul>
-                        {topic.map(term => <li>{term}</li>)}
-                    </ul>
+                    <div>
+                        {topic.map(term => <TermBox>{term}</TermBox>)}
+                    </div>
                 </>
             ))}
         </>

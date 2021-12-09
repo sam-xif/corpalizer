@@ -25,21 +25,27 @@ const DocumentUpload = (props) => {
                 reader.onload = (e) => {
                     const text = e.target.result.toString();
 
-                    axios.post('http://localhost:5000/doc', { content: text })
+                    axios.post('http://localhost:5000/doc', { content: text }, { params: { auto_recompute_scores: false }})
                     .then(result => {
                         setUploadProgress(uploadProgress + 1);
                     })
                     .catch(() => {
                         setUploadStatus(FAIL);
-                        setFiles(undefined);
                         setUploadProgress(undefined);
+                        setFiles(undefined);
                     });
                 }
 
                 if (uploadProgress === files.length) {
-                    setUploadStatus(SUCCESS);
-                    setFiles(undefined);
-                    setUploadProgress(undefined);
+                    axios.post('http://localhost:5000/rpc/recompute_tfidf_scores')
+                    .then(() => {
+                        setUploadStatus(SUCCESS);
+                        setUploadProgress(undefined);
+                        setFiles(undefined);
+                    })
+                    .catch(() => {
+                        setUploadStatus(FAIL);
+                    })
                     return;
                 }
 
@@ -66,7 +72,7 @@ const DocumentUpload = (props) => {
                 fileInputRef.current.value = '';
                 fileInputRef.current.click();
             }}></input>
-            {uploadProgress !== undefined && <StatusText>{`${uploadProgress} / ${files.length}`}</StatusText>}
+            {uploadProgress !== undefined && <StatusText>{`${uploadProgress} / ${files ? files.length : '--'}`}</StatusText>}
             <StatusText status={uploadStatus}>{uploadStatus}</StatusText>
         </div>
     )

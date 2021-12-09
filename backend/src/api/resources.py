@@ -44,19 +44,25 @@ class DocumentRetrieveUpdateDeleteResource(Resource):
                 'error': 'no content'
             }, 400
 
-        # Create file
-        with open(os.path.join(app.config['documents_dir'], '{}.txt'.format(doc_uuid)), 'w+') as f:
-            f.write(text)
+        try:
+            cur = get_mysql().connection.cursor()
 
-        cur = get_mysql().connection.cursor()
+            cur.execute('DELETE FROM document WHERE document_id = %s', (doc_uuid,))
+            insert_document(doc_uuid, text, cur)
+            recompute_tfidf_scores(cur)
+            cur.callproc('cleanup_terms')
+        except pymysql.err.OperationalError as e:
+            get_mysql().connection.rollback()
+            return {
+                'error': str(e)
+                   }, 500
+        else:
+            get_mysql().connection.commit()
+            with open(os.path.join(app.config['documents_dir'], '{}.txt'.format(doc_uuid)), 'w+') as f:
+                f.write(text)
+            TopicsResource.invalidate_cache()
 
-        cur.execute('DELETE FROM document WHERE document_id = %s', (doc_uuid,))
-        insert_document(doc_uuid, text, cur)
-        recompute_tfidf_scores(cur)
-        cur.callproc('cleanup_terms')
-
-        get_mysql().connection.commit()
-        return 204, None
+            return None, 204
 
     def delete(self, doc_uuid):
         """
@@ -65,18 +71,26 @@ class DocumentRetrieveUpdateDeleteResource(Resource):
         :return:
         """
         from api import get_mysql
-        cur = get_mysql().connection.cursor()
+
         try:
-            os.remove(os.path.join(app.config['documents_dir'], '{}.txt'.format(doc_uuid)))
-        except FileNotFoundError:
-            print("Corresponding file wasn't found")
+            cur = get_mysql().connection.cursor()
 
-        cur.execute('DELETE FROM document WHERE document_id = %s', (doc_uuid,))
-        recompute_tfidf_scores(cur)
-        cur.callproc('cleanup_terms')
-
-        get_mysql().connection.commit()
-        return 204, None
+            cur.execute('DELETE FROM document WHERE document_id = %s', (doc_uuid,))
+            recompute_tfidf_scores(cur)
+            cur.callproc('cleanup_terms')
+        except pymysql.err.OperationalError as e:
+            get_mysql().connection.rollback()
+            return {
+                'error': str(e)
+            }, 500
+        else:
+            get_mysql().connection.commit()
+            try:
+                os.remove(os.path.join(app.config['documents_dir'], '{}.txt'.format(doc_uuid)))
+            except FileNotFoundError:
+                print("Corresponding file wasn't found")
+            TopicsResource.invalidate_cache()
+            return None, 204
 
 
 class DocumentListCreateResource(Resource):
@@ -94,33 +108,41 @@ class DocumentListCreateResource(Resource):
     def post(self):
         from api import get_mysql
 
-        # TODO: Add a param to suppress auto recomputation of tfidf scores
-
         parser = reqparse.RequestParser()
         parser.add_argument('content')
+        parser.add_argument('auto_recompute_scores')
         args = parser.parse_args()
         text = args.content
+        auto_recompute_scores = bool(args.auto_recompute_scores) if args.auto_recompute_scores is not None else True
         if text is None:
             return {
                 'error': 'no content'
             }, 400
 
         doc_uuid = uuid.uuid4()
-        cur = get_mysql().connection.cursor()
+        try:
+            cur = get_mysql().connection.cursor()
 
-        # Create file
-        with open(os.path.join(app.config['documents_dir'], '{}.txt'.format(doc_uuid)), 'w+') as f:
-            f.write(text)
+            # Create file
+            with open(os.path.join(app.config['documents_dir'], '{}.txt'.format(doc_uuid)), 'w+') as f:
+                f.write(text)
 
-        insert_document(doc_uuid, text, cur)
-        recompute_tfidf_scores(cur)
-
-        get_mysql().connection.commit()
+            insert_document(doc_uuid, text, cur)
+            if auto_recompute_scores:
+                recompute_tfidf_scores(cur)
+        except pymysql.err.OperationalError as e:
+            get_mysql().connection.rollback()
+            return {
+                'error': str(e)
+            }, 500
+        else:
+            get_mysql().connection.commit()
+            TopicsResource.invalidate_cache()
 
         # Return document uuid as response
-        return {
-            'doc_uuid': str(doc_uuid)
-        }, 201
+            return {
+                'doc_uuid': str(doc_uuid)
+            }, 201
 
 
 class TrendsResource(Resource):
@@ -183,10 +205,16 @@ class TrendsResource(Resource):
 class TopicsResource(Resource):
     topic_thread = None
     topic_thread_lock = Lock()
-    cached_results = {}
+
+    cached_result = None
+    cached_result_lock = Lock()
 
     cancel_token = None
     cancel_token_lock = Lock()
+
+    @classmethod
+    def invalidate_cache(cls):
+        pass
 
     @classmethod
     def _compute_topics(cls, cancellation_token, cancellation_token_lock):
@@ -220,8 +248,8 @@ class TopicsResource(Resource):
 
         def set_progress(progress):
             cls.topic_thread_lock.acquire()
-            txid, _, thread = cls.topic_thread
-            cls.topic_thread = (txid, progress, thread)
+            _, thread = cls.topic_thread
+            cls.topic_thread = (progress, thread)
             cls.topic_thread_lock.release()
 
         def poll_cancel():
@@ -239,10 +267,9 @@ class TopicsResource(Resource):
                 poll_cancel=poll_cancel,
             )
 
-            cls.topic_thread_lock.acquire()
-            txid = cls.topic_thread[0]
-            cls.cached_results[txid] = results
-            cls.topic_thread_lock.release()
+            cls.cached_result_lock.acquire()
+            cls.cached_result = results
+            cls.cached_result_lock.release()
         except Exception as e:
             pass
 
@@ -252,77 +279,84 @@ class TopicsResource(Resource):
     @classmethod
     def get(cls):
         parser = reqparse.RequestParser()
-        parser.add_argument('transaction_id')
         parser.add_argument('cancel')
         args = parser.parse_args()
 
-        txid = int(args.transaction_id) if args.transaction_id is not None else None
         cancel = bool(args.cancel) if args.cancel is not None else None
 
-        if txid in cls.cached_results:
+        cls.cached_result_lock.acquire()
+        if cls.cached_result is not None:
+            result = cls.cached_result
+            cls.cached_result_lock.release()
             cls.topic_thread_lock.acquire()
-            if cls.topic_thread is not None and txid == cls.topic_thread[0]:
+            if cls.topic_thread is not None:
                 cls.topic_thread = None
             cls.topic_thread_lock.release()
             return {
-                'status': 'done',
-                'result': cls.cached_results[txid]
-           }, 200
+                   'status': 'done',
+                   'result': result
+               }, 200
+        cls.cached_result_lock.release()
 
+        cls.topic_thread_lock.acquire()
         if cls.topic_thread is not None:
             if cancel is True:
                 cls.cancel_token_lock.acquire()
                 cls.cancel_token[0] = True
                 cls.cancel_token_lock.release()
 
-                cls.topic_thread_lock.acquire()
-                txid, _, thread = cls.topic_thread
-                cls.topic_thread_lock.release()
+                _, thread = cls.topic_thread
 
+                # release while waiting for thread to stop
+                cls.topic_thread_lock.release()
                 thread.join()
+                cls.cancel_token_lock.acquire()
 
                 cls.topic_thread = None
-
-                return {
-                    'status': 'cancelled',
-                    'transaction_id': txid,
-                }, 200
-
-            cls.topic_thread_lock.acquire()
-            running_txid, progress, thread = cls.topic_thread
-            if txid == running_txid:
-                if progress == 1 and txid in cls.cached_results:
-                    cls.topic_thread = None
-                    cls.topic_thread_lock.release()
-                    return {
-                        'status': 'done',
-                        'result': cls.cached_results[txid],
-                       }, 200
-                else:
-                    cls.topic_thread_lock.release()
-                    return {
-                        'status': 'running',
-                        'progress': progress,
-                    }, 200
-            else:
                 cls.topic_thread_lock.release()
                 return {
-                    'error': 'Cannot start a new transaction while one is running. Supply the currently running transaction ID to view its status.'
-                }, 400
+                    'status': 'cancelled',
+                }, 200
+
+            progress = cls.topic_thread[0]
+            cls.topic_thread_lock.release()
+            return {
+                'status': 'running',
+                'progress': progress,
+            }, 200
+
+        cls.topic_thread_lock.release()
 
         if cancel is True:
             return {
-                'error': 'No transaction to cancel'
+                'error': 'No currently running process to cancel'
             }, 400
 
-        txid = max(cls.cached_results.keys()) + 1 if len(cls.cached_results.keys()) > 0 else 0
         cls.cancel_token = [False]
         thread = Thread(target=cls._compute_topics, args=(cls.cancel_token, cls.cancel_token_lock))
         thread.start()
-        cls.topic_thread = (txid, 0, thread)
+        cls.topic_thread = (0, thread)
 
         return {
             'status': 'started',
             'progress': 0,
-            'transaction_id': txid,
         }, 200
+
+
+class RPCResource(Resource):
+    def post(self, function):
+        from api import get_mysql
+
+        cur = get_mysql().connection.cursor()
+
+        if function == 'recompute_tfidf_scores':
+            recompute_tfidf_scores(cur)
+            get_mysql().connection.commit()
+
+            return {
+                'status': 'success'
+            }, 200
+
+        return {
+            'error': 'Unknown procedure ' + function
+        }, 400

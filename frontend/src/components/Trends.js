@@ -52,8 +52,6 @@ const Trends = ({ query, onQueryChange }) => {
     const [bin, setBin] = useState(BIN.DAY);
     const [trendsData, setTrendsData] = useState({});
     
-    const terms = query.split(',');
-
     const configFromObject = (obj) => {
         return Object.keys(obj).reduce((soFar, next) => {
             soFar.push({ key: obj[next], label: obj[next].substring(0, 1).toUpperCase() + obj[next].substring(1) });
@@ -62,6 +60,7 @@ const Trends = ({ query, onQueryChange }) => {
     }
 
     useEffect(() => {
+        const terms = query.split(',');
         Promise.all(terms.map(term => axios.get(`http://localhost:5000/trends/${granularity}/${term}`, { params: {
             bin_type: bin
         }}))).then(results => {
@@ -76,10 +75,7 @@ const Trends = ({ query, onQueryChange }) => {
             });
             setTrendsData(fullData);
         })
-    }, [terms, granularity, bin]);
-
-    console.log(terms);
-    console.log(trendsData);
+    }, [query, granularity, bin]);
 
     const colors = ["red", "orange", "yellow", "green", "blue", "indigo", "violet"];
 
@@ -104,7 +100,7 @@ const Trends = ({ query, onQueryChange }) => {
             <h3>Chart</h3>
             <ResponsiveContainer width="100%" height={500}>
                 <LineChart>
-                    {terms.map((term, i) => <Line data={trendsData[term]} key={term} dataKey={term} stroke={colors[i % colors.length]} />)}
+                    {query.split(',').map((term, i) => <Line data={trendsData[term]} key={term} dataKey={term} stroke={colors[i % colors.length]} />)}
                     <XAxis 
                         dataKey="time" 
                         domain={['auto', 'auto']} 
