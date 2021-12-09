@@ -11,7 +11,7 @@ from api.resources import (
     TopicsResource,
     RPCResource,
 )
-from config import pymysql_connect_kwargs
+from config import PYMYSQL_CONNECT_ARGS, DOCUMENTS_DIR
 
 _mysql = None
 
@@ -24,8 +24,8 @@ def get_mysql():
 def create_app():
     global _mysql
     app = Flask(__name__, instance_relative_config=True)
-    app.config['pymysql_kwargs'] = pymysql_connect_kwargs
-    app.config['documents_dir'] = os.environ['DOCUMENTS_DIR']
+    app.config['pymysql_kwargs'] = PYMYSQL_CONNECT_ARGS
+    app.config['documents_dir'] = DOCUMENTS_DIR
     api = Api(app)
 
     api.add_resource(DocumentListCreateResource, '/doc')

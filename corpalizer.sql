@@ -25,10 +25,6 @@ CREATE TABLE term (
     term_text VARCHAR(100) PRIMARY KEY
 );
 
-CREATE TABLE topic (
-	topic_id INT PRIMARY KEY AUTO_INCREMENT
-);
-
 CREATE TABLE document_term (
 	score DOUBLE,
 	frequency INT,

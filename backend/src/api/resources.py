@@ -221,8 +221,8 @@ class TopicsResource(Resource):
 
     @classmethod
     def _compute_topics(cls, cancellation_token, cancellation_token_lock):
-        from api import pymysql_connect_kwargs
-        conn = pymysql.connect(**pymysql_connect_kwargs)
+        from api import PYMYSQL_CONNECT_ARGS
+        conn = pymysql.connect(**PYMYSQL_CONNECT_ARGS)
 
         cur = conn.cursor()
 
