@@ -1,6 +1,6 @@
-DROP DATABASE IF EXISTS myindex;
-CREATE DATABASE myindex;
-USE myindex;
+DROP DATABASE IF EXISTS corpalizer;
+CREATE DATABASE corpalizer;
+USE corpalizer;
 
 CREATE TABLE document (
 	document_id VARCHAR(100) PRIMARY KEY,
