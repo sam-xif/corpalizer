@@ -12,7 +12,6 @@ CREATE TABLE paragraph (
     document_id VARCHAR(100),
     position_in_fullText INT,
     CONSTRAINT paragraph_document_fk FOREIGN KEY (document_id) REFERENCES document(document_id) ON UPDATE RESTRICT ON DELETE CASCADE
---    PRIMARY KEY (document_id, position_in_fullText)
 );
 
 CREATE TABLE sentence (

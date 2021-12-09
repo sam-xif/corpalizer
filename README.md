@@ -15,9 +15,9 @@ This guide assumes that you have a running MySQL instance with an imported schem
 If you do not have this dump, feel free to contact me at [s.xifaras999@gmail.com](mailto:s.xifaras999@gmail.com).
 
 In case the following steps don't work as expected, here is the setup of my machine:
-* `python` 3.8.9, `pip` 21.3.1
-* `node` 12.18.3, `npm` 6.14.6
-* `yarn` 1.22.10
+* `python` 3.8.9, `pip` 21.3.1 ([download](https://www.python.org/downloads/))
+* `node` 12.18.3, `npm` 6.14.6 ([download](https://nodejs.org/en/download/))
+* `yarn` 1.22.10 (optional, install with `npm install --global yarn` once node is installed)
 
 Versions of packages can be found in `frontend/package.json` and `backend/requirements.txt`.
 
