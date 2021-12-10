@@ -30,7 +30,7 @@ Versions of packages can be found in `frontend/package.json` and `backend/requir
 1. `mkdir -p documents`. This will create the folder where document uploads are stored if it doesn't exist already. 
 1. `cp src/config.example.py src/config.py`
 1. Open up the newly created `src/config.py` and fill in the credentials to connect to your MySQL instance. There should be no need to change the default `DOCUMENTS_DIR` variable.
-1. Run the app with `python src/main.py`, and keep an eye out for the like that looks like this: `* Running on http://127.0.0.1:<port_number>/ (Press CTRL+C to quit)`. The port number will probably be 5000. Save this information for the frontend setup.
+1. Run the app with `python src/main.py`, and keep an eye out for the line that looks like this: `* Running on http://127.0.0.1:<port_number>/ (Press CTRL+C to quit)`. The port number will probably be 5000. Save this information for the frontend setup.
 
 **After `cd`ing into `frontend/`:**
 1. `npm i` installs dependencies, or if you have yarn, `yarn` also works.
