@@ -173,7 +173,7 @@ class TrendsResource(Resource):
         if granularity == self.GRANULARITY_DOCUMENT:
             cur.execute(
                 'SELECT frequency, timestamp FROM document_term JOIN document USING (document_id) WHERE term_text = %s',
-                (term_text,))
+                (stemmed_term_text,))
             freq_date_pairs = cur.fetchall()
         elif granularity == self.GRANULARITY_PARAGRAPH:
             cur.execute(
