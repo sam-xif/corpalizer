@@ -6,7 +6,7 @@
 * [How to Run the App](#2-how-to-run-the-app)
 
 ## 1. About the Project
-Read the original proposal [here](link), and read the final report [here](link)
+Read the original proposal [here](https://docs.google.com/document/d/13BBvZktMfOu3Z7d5VEU8aZa-Elv1IkQoPJYXr7gq_l4/edit?usp=sharing), and read the final report [here](https://docs.google.com/document/d/1aQUGsqzdQs1JsQLwHd72P8X1lMnRD-y4onxBiEZpeps/edit?usp=sharing)
 
 ## 2. How to Run the App
 Clone this repository or unpack the zip archive from the `final-submission` tag, and then run the following commands.
