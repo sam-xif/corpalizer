@@ -9,10 +9,10 @@
 Read the original proposal [here](https://docs.google.com/document/d/13BBvZktMfOu3Z7d5VEU8aZa-Elv1IkQoPJYXr7gq_l4/edit?usp=sharing), and read the final report [here](https://docs.google.com/document/d/1aQUGsqzdQs1JsQLwHd72P8X1lMnRD-y4onxBiEZpeps/edit?usp=sharing)
 
 ## 2. How to Run the App
-Clone this repository or unpack the zip archive from the `final-submission` tag, and then run the following commands.
-I would recommend running the frontend and backend commands in two separate shells.
+Clone this repository or unpack the zip archive, and then run the following commands.
+I would highly recommend running the frontend and backend commands in two separate shells.
 This guide assumes that you have a running MySQL instance with an imported schema of the Corpalizer database. 
-If you do not have this dump, feel free to contact me at [s.xifaras999@gmail.com](mailto:s.xifaras999@gmail.com).
+If you do not have this schema dump, feel free to contact me at [xifaras.s@northeastern.edu](mailto:xifaras.s@northeastern.edu).
 This guide also assumes you are on a Unix-like system, such as Mac or Linux. 
 
 In case the following steps don't work as expected, here is the setup of my machine:
@@ -22,7 +22,7 @@ In case the following steps don't work as expected, here is the setup of my mach
 
 Versions of packages can be found in `frontend/package.json` and `backend/requirements.txt`.
 
-**In `backend/`:**
+**After `cd`ing into `backend/`:**
 1. If you would like to create a virtual environment, run the following, if not, skip to step 4
 1. `python -m venv venv`
 1. `source ./venv/bin/activate`. To deactivate the virtual environment later, run `deactivate` in the same terminal.
@@ -32,7 +32,7 @@ Versions of packages can be found in `frontend/package.json` and `backend/requir
 1. Open up the newly created `src/config.py` and fill in the credentials to connect to your MySQL instance. There should be no need to change the default `DOCUMENTS_DIR` variable.
 1. Run the app with `python src/main.py`, and keep an eye out for the like that looks like this: `* Running on http://127.0.0.1:<port_number>/ (Press CTRL+C to quit)`. The port number will probably be 5000. Save this information for the frontend setup.
 
-**In `frontend/`:**
+**After `cd`ing into `frontend/`:**
 1. `npm i` installs dependencies, or if you have yarn, `yarn` also works.
 1. `cp .env.example .env`
 1. Populate the newly created `.env` file with the scheme, host, and port information from the last step of the backend setup.
