@@ -1,8 +1,6 @@
-import os
-
 from flask import Flask
-from flask_restful import Api
 from flask_pymysql import MySQL
+from flask_restful import Api
 
 from api.resources import (
     DocumentListCreateResource,

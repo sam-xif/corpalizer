@@ -1,17 +1,18 @@
+import math
 import os
 import uuid
+from threading import Thread, Lock
+
+import pymysql
 from flask import request, current_app as app
 from flask_restful import Resource, reqparse
+from nltk.stem import PorterStemmer
+
 from api.services import (
     generate_topics,
     insert_document,
     recompute_tfidf_scores,
 )
-import math
-from datetime import timedelta
-from threading import Thread, Lock
-from nltk.stem import PorterStemmer
-import pymysql
 
 
 class DocumentRetrieveUpdateDeleteResource(Resource):
@@ -25,8 +26,8 @@ class DocumentRetrieveUpdateDeleteResource(Resource):
             out = f.read()
 
         return {
-            'content': out
-        }, 200
+                   'content': out
+               }, 200
 
     def put(self, doc_uuid):
         """
@@ -42,8 +43,8 @@ class DocumentRetrieveUpdateDeleteResource(Resource):
         text = args.content
         if text is None:
             return {
-                'error': 'no content'
-            }, 400
+                       'error': 'no content'
+                   }, 400
 
         try:
             cur = get_mysql().connection.cursor()
@@ -55,7 +56,7 @@ class DocumentRetrieveUpdateDeleteResource(Resource):
         except pymysql.err.OperationalError as e:
             get_mysql().connection.rollback()
             return {
-                'error': str(e)
+                       'error': str(e)
                    }, 500
         else:
             get_mysql().connection.commit()
@@ -82,8 +83,8 @@ class DocumentRetrieveUpdateDeleteResource(Resource):
         except pymysql.err.OperationalError as e:
             get_mysql().connection.rollback()
             return {
-                'error': str(e)
-            }, 500
+                       'error': str(e)
+                   }, 500
         else:
             get_mysql().connection.commit()
             try:
@@ -103,8 +104,8 @@ class DocumentListCreateResource(Resource):
         tuples = cur.fetchall()
 
         return {
-            'documents': [{'id': doc_id, 'date': date.strftime('%Y-%m-%d')} for doc_id, date in tuples]
-        }, 200
+                   'documents': [{'id': doc_id, 'date': date.strftime('%Y-%m-%d')} for doc_id, date in tuples]
+               }, 200
 
     def post(self):
         from api import get_mysql
@@ -117,8 +118,8 @@ class DocumentListCreateResource(Resource):
         auto_recompute_scores = bool(args.auto_recompute_scores) if args.auto_recompute_scores is not None else True
         if text is None:
             return {
-                'error': 'no content'
-            }, 400
+                       'error': 'no content'
+                   }, 400
 
         doc_uuid = uuid.uuid4()
         try:
@@ -134,16 +135,16 @@ class DocumentListCreateResource(Resource):
         except pymysql.err.OperationalError as e:
             get_mysql().connection.rollback()
             return {
-                'error': str(e)
-            }, 500
+                       'error': str(e)
+                   }, 500
         else:
             get_mysql().connection.commit()
             TopicsResource.invalidate_cache()
 
-        # Return document uuid as response
+            # Return document uuid as response
             return {
-                'doc_uuid': str(doc_uuid)
-            }, 201
+                       'doc_uuid': str(doc_uuid)
+                   }, 201
 
 
 class TrendsResource(Resource):
@@ -170,22 +171,26 @@ class TrendsResource(Resource):
         bin_type = request.args.get('bin_type', self.BIN_DAY)
 
         if granularity == self.GRANULARITY_DOCUMENT:
-            cur.execute('SELECT frequency, timestamp FROM document_term JOIN document USING (document_id) WHERE term_text = %s', (term_text,))
+            cur.execute(
+                'SELECT frequency, timestamp FROM document_term JOIN document USING (document_id) WHERE term_text = %s',
+                (term_text,))
             freq_date_pairs = cur.fetchall()
         elif granularity == self.GRANULARITY_PARAGRAPH:
             cur.execute(
-                'SELECT frequency, timestamp FROM paragraph_term JOIN paragraph USING (paragraph_id) JOIN document USING (document_id) WHERE term_text = %s',
+                'SELECT frequency, timestamp FROM paragraph_term JOIN paragraph USING (paragraph_id) JOIN document'
+                ' USING (document_id) WHERE term_text = %s',
                 (stemmed_term_text,))
             freq_date_pairs = cur.fetchall()
         elif granularity == self.GRANULARITY_SENTENCE:
             cur.execute(
-                'SELECT frequency, timestamp FROM sentence_term JOIN sentence USING (sentence_id) JOIN paragraph USING (paragraph_id) JOIN document USING (document_id) WHERE term_text = %s',
+                'SELECT frequency, timestamp FROM sentence_term JOIN sentence USING (sentence_id) JOIN paragraph'
+                ' USING (paragraph_id) JOIN document USING (document_id) WHERE term_text = %s',
                 (stemmed_term_text,))
             freq_date_pairs = cur.fetchall()
         else:
             return {
-                'error': 'unknown granularity'
-            }, 400
+                       'error': 'unknown granularity'
+                   }, 400
 
         date_to_freq_map = {}
         date_format = {
@@ -201,11 +206,15 @@ class TrendsResource(Resource):
                 date_to_freq_map[key] = freq
 
         return {
-            'data': date_to_freq_map
-        }, 200
+                   'data': date_to_freq_map
+               }, 200
 
 
 class TopicsResource(Resource):
+    """
+    A resources that asynchronously computes topics and stores a cached result.
+    """
+
     topic_thread = None
     topic_thread_lock = Lock()
 
@@ -296,9 +305,9 @@ class TopicsResource(Resource):
                 cls.topic_thread = None
             cls.topic_thread_lock.release()
             return {
-                   'status': 'done',
-                   'result': result
-               }, 200
+                       'status': 'done',
+                       'result': result
+                   }, 200
         cls.cached_result_lock.release()
 
         cls.topic_thread_lock.acquire()
@@ -318,22 +327,22 @@ class TopicsResource(Resource):
                 cls.topic_thread = None
                 cls.topic_thread_lock.release()
                 return {
-                    'status': 'cancelled',
-                }, 200
+                           'status': 'cancelled',
+                       }, 200
 
             progress = cls.topic_thread[0]
             cls.topic_thread_lock.release()
             return {
-                'status': 'running',
-                'progress': progress,
-            }, 200
+                       'status': 'running',
+                       'progress': progress,
+                   }, 200
 
         cls.topic_thread_lock.release()
 
         if cancel is True:
             return {
-                'error': 'No currently running process to cancel'
-            }, 400
+                       'error': 'No currently running process to cancel'
+                   }, 400
 
         cls.cancel_token = [False]
         thread = Thread(target=cls._compute_topics, args=(cls.cancel_token, cls.cancel_token_lock))
@@ -341,9 +350,9 @@ class TopicsResource(Resource):
         cls.topic_thread = (0, thread)
 
         return {
-            'status': 'started',
-            'progress': 0,
-        }, 200
+                   'status': 'started',
+                   'progress': 0,
+               }, 200
 
 
 class RPCResource(Resource):
@@ -357,9 +366,9 @@ class RPCResource(Resource):
             get_mysql().connection.commit()
 
             return {
-                'status': 'success'
-            }, 200
+                       'status': 'success'
+                   }, 200
 
         return {
-            'error': 'Unknown procedure ' + function
-        }, 400
+                   'error': 'Unknown procedure ' + function
+               }, 400
